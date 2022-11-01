@@ -1,0 +1,3 @@
+[submodule "PF_RING"]
+	path = PF_RING
+	url = git@github.com:ntop/PF_RING.git

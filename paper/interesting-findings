@@ -1,0 +1,229 @@
+Idea: look for fingerprints that were seen never/rarely before a certain date (e.g. Nov 20, 2017),
+but then frequently after that.
+
+select id, b_count, a_count, coalesce(a_count / b_count, 1) as ratio from
+    (select measurements.id, coalesce(min(b_count),1) as b_count, sum(count) as a_count from measurements left join
+        (select id, sum(count) as b_count from measurements where unixtime < 1511136000 group by id) as before
+    on measurements.id = before.id
+    group by measurements.id) as q
+where a_count > 9000 order by ratio desc;
+
+
+
+
+Is this (0848dbc) an early version of Chrome 64? Seems to disappear right when chrome 64 takes off, 
+but itself wasn't seen until december either.
+https://tlsfingerprint.io/compare/e43079f0964e3f50/0848dbc8e0ad6329
+
+
+Another AB testing? shows up late november...
+https://tlsfingerprint.io/compare/f8370c3c4f954718/e2743bd5cd8a0008
+
+
+Some weird scanner...seems to be a bunch of them, maybe? click related, it has a bunch that all have same (weird) supported groups
+https://tlsfingerprint.io/nid/3772310310858309918
+
+
+These guys both have some weird duty cycling going on...
+https://tlsfingerprint.io/compare/03cf6e6c7ff9357b/448a9e1f7f8563a8
+
+Chrome (not TLS 1.3)? Seems to be increasing starting in December (from 0)
+peaking at ~0.005%...Small delta to #1 (06e3579010335639), though. Adds ecdsa_sha512 sigalg
+adds EMPTY_RENEGOTIATION_INFO_SCSV, loses renegotiation_info extension and rsa_512 sigalg.
+https://tlsfingerprint.io/nid/-4287098851290621059
+
+
+Hey, it's our friend! 100 per hour arbitrary fingerprint (to test captures)
+https://tlsfingerprint.io/nid/-7351637592031701818
+
+
+Some clear step functions. Unique cipher suites (with its brother that moves signature algorithms ext around)
+https://tlsfingerprint.io/nid/6037019561157597943
+https://tlsfingerprint.io/compare/53c7cd4e2ce21af7/edd64866da8a96e4
+
+
+
+select id, c, n from (select id, count(distinct sni) as c, count(*) as n from ipv4connections group by id) as q where q.c < 10;
+
+https://tlsfingerprint.io/nid/-9068107999405752859
+preyproject.com (Laptop antitheft device)
+
+
+
+
+
+
+----------------------+---+-------
+ -9206762237450555413 | 1 |     1
+ -9205591586198355187 | 1 |    56
+ -9202568325203144753 | 8 |    36
+ -9196068123776021020 | 1 |    10
+ -9188479436483533421 | 2 |     2
+ -9185386890589158275 | 2 |     2
+ -9180657226752382861 | 1 |     1
+ -9174584089620090643 | 1 |  3255
+ -9174335079572656593 | 1 |     1
+ -9166288386939310367 | 5 |    25
+ -9165064014312626359 | 1 |     1
+ -9161661398020132684 | 2 |   396
+ -9154475803433402403 | 2 |     2
+ -9150274604008073524 | 3 |     3
+ -9142298218870970010 | 2 |     2
+ -9138588794648638114 | 3 |     4
+ -9137254125790017815 | 7 |     7
+ -9120142460031577457 | 2 |     3
+ -9114530781933845388 | 2 |     3
+ -9113260451248909922 | 1 |     1
+ -9112159596840336743 | 1 |     8
+ -9111784933027215446 | 1 |     1
+ -9110047133175423872 | 1 |     1
+
+
+
+
+
+          id          | c |   n   
+----------------------+---+-------
+  -977996107842726989 | 1 | 43699   Cisco Cloud Web?
+  8577568175451810252 | 1 | 42274   RedHat?
+ -8685003085447297141 | 6 | 30589   External scanner -> *.colorado.edu
+ -3043214654480646322 | 3 | 23576   Apple Push notifications
+ -6423993798557871268 | 1 | 21956   Scanner? Scanning both internal and external
+ -5231413793168069546 | 1 | 20704   ???
+ -4261455803793459001 | 1 | 18462
+  3920219210708377372 | 5 | 18350   Google APIs
+ -7974564939319481888 | 1 | 17069   LogMe In Remote access?
+ -2811952686577646307 | 1 | 16208   valid.google.com
+  6733720453876628034 | 1 | 15851
+ -5894806305060634771 | 4 | 15618   android.clients.google.com
+  7387015697397427639 | 1 | 14101
+  7521215035453593558 | 1 | 13430
+   502795999810062699 | 1 | 12609
+ -2022210942072690627 | 1 | 12527
+  5609403058881020954 | 1 | 11826
+  -766470037926028345 | 4 | 11324
+  8869745110706318943 | 1 | 11261
+ -8687394864699447561 | 2 | 11212
+  6046648551066114632 | 2 | 10143
+ -9068107999405752859 | 5 | 10114
+  8814171868734835853 | 1 | 10048
+
+dest ip:
+>>> socket.inet_ntoa(struct.pack('!l', 788474114))
+src ip (/16):
+>>> socket.inet_ntoa(struct.pack('!h', -32630)+'\x00'*2)
+
+
+
+-977996107842726989
+No SNI, supports single DES!! Always talks to 46.255.41.2
+(from various campus IPs, including public, private and 198.11.0.0/16 subnets), which is a "Cisco Cloud Web Security" IP.
+Maybe this is Cisco routers/switches phoning home?
+But seems to follow human times (lower volumes on weekends)
+
+8577568175451810252
+No SNI, Always talks to 209.132.183.107 or 209.132.183.108
+(owned by RedHat)
+Weird pattern, perhaps automated red hat updates?
+
+
+-8685003085447297141
+SNI: fedauth.colorado.edu, www.colorado.edu, colorado.edu, eddy.colorado.edu, etc
+Seems like some kinda crawler, but lots of source IPs (not sure where)
+Pretty weird set of cipher suites, includes RC4 and MD5 (eww)
+BrainpoolP256r1 appears twice in Supported groups..?
+
+-3043214654480646322
+https://tlsfingerprint.io/nid/-3043214654480646322
+Apple push notifications! (Ranked 68!)
+SNI is "always" courier.push.apple.com (sometimes ends with an extra "."?)
+Pretty similar to an iOS 10 Fingerprint (-8009421017162168522): https://tlsfingerprint.io/compare/d5c45465386aff4e/90d8d20547804736
+
+
+-6423993798557871268
+RC4/MD5 cipher suites... sends no SNI :(
+Hits both internal CU IPs, and external ones....
+Appears to be a scanner, judging by 1) lack of diurnal variation
+and 2) the fact that it hits sites that don't have anything useful on them e.g. 128.138.129.16
+But when it does send SNI, this fingerprint is the same as Firefox 51 on Android 4.3/4.4
+https://tlsfingerprint.io/compare/a6d963ad0da5535c/f96844c09f8be0a2
+
+
+
+-5231413793168069546
+No SNI, seems to be automated (fairly consistent)
+RC4 and MD5 ciphers...
+contacts Colorado IPs (lots of differnet ones) but also contacts some IBM Security servers 158.85.222.64, 5.153.55.164
+
+
+
+
+3920219210708377372
+Uses 3DES_CBC (sweet32 attack vulnerable...?)
+SNIs: www.googleapis.com, acounts.google.com, drive.google.com, csi.gstatic.com, clients2.google.com
+follows user/diurnal pattern
+
+
+https://tlsfingerprint.io/compare/e29bd68b129d49f4/0271900725cab048
+
+
+s 
+
+
+Here are some fingerprints that collide with the key_share extension (40).
+extended_random apparently used this in some clients...
+# select fingerprints.id, seen from fingerprints left join mv_ranked_fingerprints on fingerprints.id=mv_ranked_fingerprints.id where position('\x0028' in extensions)%2=1 and position('\x002b' in extensions)=0;
+          id          |  seen  
+----------------------+--------
+  6094122109999616129 | 100228
+  5183073037398774784 |  37129
+ -8396988667797225296 |     45
+
+
+Middle one appears to be trying to use extended_random, may be a suite_b/bsafe thing...
+Other two are nintendo related
+Look for other nintendo things (that send SNI)
+select id, anon_cli_ip, server_ip, encode(sni,'escape') from ipv4connections where encode(sni,'escape') like '%nintendo%'
+
+
+No other TLS 1.3 extension appears without also having the supported_versions extension that
+indicates TLS 1.3 support
+
+
+
+Tor-vanilla:
+https://tlsfingerprint.io/id/8ee89243ff4b98d7
+
+
+"All" the weird fingerprints (44,655 of them) that only show up once in nov dec andnot between:
+select * from (select a.id, a.n as n1, coalesce(b.n,0) as n2  from (select fingerprints.id, sum(coalesce(count,0)) as n from fingerprints left join measurements on erprints.id=measurements.id where (unixtime>1510099200 AND unixtime < 1510444800) OR (unixtime>1512691200 and unixtime<1513123200) group by fingerprints.id) as a left join (select fingerprints.id, coalesce(sum(coalesce(count,0)),0) as n from fingerprints left join measurements on fingerprints.id=measurements.id where (unixtime>1510704000 and unixtime < 1512345600) group by fingerprints.id) as b on a.id=b.id) as q where n2=0;
+
+
+
+select * from
+(select a.id, a.n as n1, coalesce(b.n,0) as n2 from
+  (select fingerprints.id, sum(count) as n from fingerprints
+   left join measurements on fingerprints.id=measurements.id
+   where (unixtime > extract(epoch from timestamp '2017-11-8 00:00:00') AND
+          unixtime < extract(epoch from timestamp '2017-11-12 00:00:00')) OR
+         (unixtime > extract(epoch from timestamp '2017-12-8 00:00:00') AND
+          unixtime < extract(epoch from timestamp '2017-12-12 00:00:00'))
+   group by fingerprints.id) as a
+left join
+  (select fingerprints.id, coalesce(sum(count),0) as n from fingerprints
+   left join measurements on fingerprints.id=measurements.id
+   where (unixtime > extract(epoch from timestamp '2017-11-13 00:00:00') AND
+          unixtime < extract(epoch from timestamp '2017-12-7 00:00:00')) OR
+         (unixtime > extract(epoch from timestamp '2017-12-13 00:00:00') AND
+          unixtime < extract(epoch from timestamp '2018-1-6 00:00:00'))
+   group by fingerprints.id) as b
+on a.id=b.id) as q where n2=0;
+
+
+
+
+Superfish:
+https://tlsfingerprint.io/id/53c7a727b464d590
+
+look at servers/clients that connect to that fingerprint with so many export/rc4/md5 broken ciphers (ranked 91):
+select * from (select count(*), ipv4(server_ip), ipv4net(anon_cli_ip) from ipv4connections where id=-6423993798557871268 group by server_ip, anon_cli_ip) as q order by count desc;

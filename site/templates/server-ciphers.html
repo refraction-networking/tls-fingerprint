@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %} - Selected ciphers{% endblock %}
+{% block server_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <table class="table table-bordered">
+        <thead>
+            <tr>
+            <th>Cipher</th>
+            <th>Unique Client Fingerprints</th>
+            <th>Unique Server Fingerprints</th>
+            <th>Connections (%)</th>
+            </tr>
+    </thead>
+    <tbody>
+        {% for c in data %}
+        <tr>
+        <td><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }} (0x{{ '%04x' % c.id }})</a></td>
+        <td>{{ c.cids }}</td>
+        <td>{{ c.sids }}</td>
+        <td>{{ '%0.2f' % (100*(c.f_conns|float)) }}</td>
+        </tr>
+        {% endfor %}
+
+    </tbody>
+    </table>
+    </main>
+{% endblock %}
+
+{% block foot %}
+<!--
+
+Cipher & Client Fingerprints & Server Fingerprints & \% Connections \\
+\hline
+{% for c in data[:10] %}
+{{ c.name|replace("_","\\_") }} & {{c.cids }} & {{ c.sids }} & {{ '%0.1f' % (100*(c.f_conns|float)) }} \\
+{% endfor %}
+
+
+
+{% for c in data[:10] %}
+{{ c.name }},{{ '%0.1f' % (100*(c.f_conns|float)) }} {% endfor %}
+other,{{ '%0.1f' % (100*(data[10:]|sum(attribute='f_conns'))) }}
+
+-->
+{% endblock %}

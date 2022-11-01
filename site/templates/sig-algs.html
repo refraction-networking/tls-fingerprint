@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %} - Signature Algorithms{% endblock %}
+{% block sigalgs_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+    <table id="sigalgs" class="table table-bordered table-sm table-striped">
+      <thead>
+        <tr>
+            <th>Signature Algorithm</th>
+            <th>Unique Fingerprints (%)</th>
+            <th>Connections</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sa in sig_algs %}
+        <tr>
+          <td>{{ sa.name }}</td>
+          <td>{{ sa.fps }} ({{ '%0.1f' % (100*(sa.fps|float)/tot_fps) }}%)</td>
+          <td>{{ '%0.1f' % (100*(sa.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </main>
+
+
+    <!-- Using https://github.com/mdbootstrap/bootstrap-material-design -->
+    <script type="text/javascript" src="/static/datatables.min.js"></script>
+    <script>
+$(document).ready(function () {
+        $('#sigalgs').DataTable(
+            {"order": [[ 2, "desc" ]],
+             "searching": true});
+        $('.dataTables_length').addClass('bs-select');
+});
+    </script>
+{% endblock %}

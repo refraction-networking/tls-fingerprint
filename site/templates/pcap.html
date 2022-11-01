@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %} - Upload PCAP{% endblock %}
+{% block pcap_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+
+        <h1>Upload pcap File</h1>
+        <p>
+        You can upload a PCAP file, and we will provide an anotated list of TLS fingerprints that we can extract.
+        We currently only parse TCP/443 packets, and only parse Client Hello messages.<br/></p>
+
+        <p>To capture only client hello messages with tcpdump, use:
+        <pre>'(tcp[tcp[12]/4]=22) and (tcp[tcp[12]/4+1]=3) and (tcp[tcp[12]/4+5]=1) and (tcp[tcp[12]/4+9]=3)'</pre>
+        </p>
+        <form method=post enctype=multipart/form-data>
+        <p><input type=file name=file>
+        <input type=submit value=Upload>
+        </form>
+
+    </main>
+{% endblock %}

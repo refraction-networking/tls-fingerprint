@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %} - Session Tickets{% endblock %}
+{% block session_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <h3>Session Ticket sizes</h3>
+
+        <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">About Session Tickets</h4>
+        <p>Session Tickets are an extension used in resuming previous TLS connections.
+        Clients send an opaque session ticket (previously supplied by the server) in the Client Hello.
+        </p>
+
+        <p>This table lists popular sizes of session tickets, useful for censorship circumvention tools
+        that use this extension to covertly send tagging or other session information.
+        </p>
+        </div>
+
+
+        <div class="alert alert-success" role="alert">
+        <b>{{ '%0.2f'|format(pct_tickets) }}%</b> of Client Hello messages include a <a href="/find/extension/0023">Session Ticket</a> extension. Of those, these are their sizes:
+        </div>
+
+        <table class="table table-bordered table-sm table-striped">
+        <thead>
+            <tr>
+            <th>Rank</th>
+            <th>Ticket Size (Bytes)</th>
+            <th>% Connections (of those that Session Tickets)</th>
+            </tr>
+    </thead>
+    <tbody>
+
+        {% for d in data %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ d.size }}</td>
+            <td>{{ '%0.2f'|format(d.pct_conns) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+
+    </main>
+{% endblock %}
+
+
+{% block foot %}
+{% endblock %}

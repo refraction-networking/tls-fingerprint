@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %} - PCAP Results{% endblock %}
+{% block pcap_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+
+        <h1>Results</h1>
+        {% for r in results %}
+        #{{ r.n }} {% if r.sni is not none %}{{ r.sni }} {% endif %}<a href="/id/{{ r.hid }}">{{ r.hid }}</a><br/>
+        {% endfor %}
+
+    </main>
+
+{% endblock %}

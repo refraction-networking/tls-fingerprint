@@ -1,0 +1,8 @@
+{
+    "nodes":[{% for n in nodes %}
+        {"id":"{{ n.id }}", "name":"", "value":"{{ n.value }}", "group":"{{ n.group}}"}{% if not loop.last %},{% endif %}{% endfor %}
+    ],
+    "links":[{% for e in links %}
+        {"source":"{{ e.source }}", "target":"{{ e.target }}", "value":"{{ e.value }}", "group":"{{ e.group }}", "width":"{{ e.width }}"}{% if not loop.last %},{% endif %}{% endfor %}
+    ]
+}

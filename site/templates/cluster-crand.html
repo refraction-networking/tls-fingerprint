@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %} - Clusters for duplicate client randoms {% endblock %}
+{% block cluster_class %} active{% endblock %}
+{% block content %}
+
+<style>
+
+.links line {
+  /*stroke: #999;*/
+  stroke-opacity: 0.6;
+}
+
+.nodes circle {
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+@media (min-width: 1800px) {
+.container-big {
+    max-width: 1740px;
+}
+}
+
+svg {
+ border: 1px solid #000;
+}
+
+iframe {
+    border: none;
+    z-index: 10;
+}
+
+.highlight {
+    /*normal-color: #1f77b4;*/
+    /*color: #ff7f0e;*/
+    color: #d62728;
+}
+
+.compare {
+    color: #2ca02c;
+}
+
+</style>
+
+    <main role="main" class="container container-big">
+     <div class="row">
+      <div class="col-6">
+        <h3>Clusters for duplicate client randoms</h3>
+        <p>Blue nodes are fingerprints that duplicated a client random,
+        orange nodes are fingerprints that are similar. Size of node is
+        proportional to (log of) number of times we see that fingerprint. Red links
+        connect fingerprints that produced the same client random.</p>
+        <p><table>
+                <tr><td><b>Fingerprints included</b></td> <td>{{ fps }}</td></tr>
+                <tr><td><b>Duplicating fingerprints</b></td> <td>{{ dup_fps }}</td></tr>
+                <tr><td><b>Clusters</b></td> <td>{{ n_clusters }}</td></tr>
+                <tr><td class="highlight"><b>Highlighted</b></td> <td id="highlight"><a href="/id/{{ hid }}">{{ hid }}</a></td></tr>
+                <tr><td class="compare"><b>Comparing</b></td> <td id="compare-td"><a href="/id/{{ hid }}">{{ hid }}</a></td></tr>
+           </table>
+        </p>
+		<svg width="100%" height="700"></svg>
+      </div>
+      <div class="col-6">
+        <iframe width="100%" height="100%" src="/compare-mid/x/x" id="compare-frame"></iframe>
+      </div>
+     </div>
+     <div class="col-12">
+     </div>
+    </main>
+    <script src="/cluster-crand.js"></script>
+{% endblock %}
+
+
+{% block foot %}
+{% endblock %}

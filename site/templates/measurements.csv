@@ -1,0 +1,3 @@
+time,count
+{% for d in data %}{{ d[0] }},{{ d[1] }}
+{% endfor %}

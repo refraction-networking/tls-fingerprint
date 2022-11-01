@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %} - Total{% endblock %}
+{% block total_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <h1>TLS Connections per hour</h1>
+        <div class="graph" id="mmh">
+        <canvas ylabel="Connections / hour" yformat=".0s" width=960 height=500></canvas>
+        <script src="/idgraph.js/data/generic/total-measurements/mmh"></script>
+        </div>
+
+        <h1>Unique Fingerprints</h1>
+        <div class="graph" id="unique">
+        <canvas ylabel="Unique fingerprints / hour" yformat=".2s" width=960 height=500></canvas>
+        <script src="/idgraph.js/data/generic/unique-fingerprints/unique"></script>
+        </div>
+
+
+        <h1>New Fingerprints</h1>
+        <div class="graph" id="new">
+        <canvas width=960 height=500></canvas>
+        <script src="/idgraph.js/data/generic/new-fingerprints/new"></script>
+        </div>
+
+        <h1>Total Connections</h1>
+        <div class="graph" id="total">
+        <canvas ylabel="Connections" yformat=".3s" width=960 height=500></canvas>
+        <script src="/idgraph.js/data/generic/cumulative-measurements/total?fill=false"></script>
+        </div>
+
+        <h1>Total unique fingerprints</h1>
+        <div class="graph" id="totuniq">
+        <canvas ylabel="Fingerprints" yformat=".2s" width=960 height=500></canvas>
+        <script src="/idgraph.js/data/generic/cumulative-unique/totuniq?fill=false"></script>
+        </div>
+
+
+        <h1>CDF Fingerprints</h1>
+        <div class="graph" id="cdf">
+        <canvas xlog="true" xformat="logfmt:.1s" xlabel="Fingerprint" ylabel="CDF Connections" yrange="0,1" width=960 height=500></canvas>
+        <script src="/cdfgraph.js/data/generic/cdf-fingerprints/cdf"></script>
+        </div>
+    </main>
+{% endblock %}

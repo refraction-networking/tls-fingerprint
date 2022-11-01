@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/graph.css">
+    <link rel="stylesheet" href="/static/highlight.default.css">
+    <link rel="stylesheet" href="/static/datatables.css">
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha384-3ceskX3iaEnIogmQchP8opvBy3Mi7Ce34nWjpBIwVTHfGYWQS9jwHDVRnpKKHJg7" crossorigin="anonymous"></script>
+    <!--<script data-require="d3@3.5.3" data-semver="3.5.3" src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.js"></script>-->
+    <script src="https://d3js.org/d3.v5.min.js" charset="utf-8"></script>
+    <!--<script src="https://d3js.org/d3.v4.min.js"></script>-->
+    <script src="/static/highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+  </head>
+  <body>
+
+    <style>
+        .diff {
+            background-color: #cc0;
+        }
+
+        .inserted {
+            background-color: #acf2bd;
+        }
+
+        .removed {
+            background-color: #fdb8c0;
+        }
+
+        .container {
+            max-width: 2000px;
+        }
+
+        td:nth-child(1) {
+            font-size: 8pt;
+        }
+
+        td {
+            font-size: 9pt;
+        }
+    </style>
+
+      <div class="col-12">
+        <table class="table">
+          <thead>
+                  <th style="width: 8%"></th>
+                  <th style="width: 46%"></th>
+                  <th style="width: 46%"></th>
+          </thead>
+          <tbody>
+            <tr><td>Compare</td><td><h3><a style="color: #ff7f0e" href="/id/{{ hid1 }}">{{ hid1 }}</a></h3></td>
+                    <td><h3><a style="color: #2ca02c" href="/id/{{ hid2 }}">{{ hid2 }}</a></h3></td>
+                    <tr><td>Connections</td><td>{{'%0.2f'|format(frac1_wk|float)}}%</td>
+                                        <td>{{'%0.2f'|format(frac2_wk|float)}}%</td></tr>
+            <tr><td>Rank</td><td>{{ rank1_wk }}</td>
+                             <td>{{ rank2_wk }}</td></tr>
+            <tr><td>TLS Version</td><td>{{ tls_ver1 }}</td>
+                                    <td{% if tls_ver1 != tls_ver2 %} class="diff"{% endif %}>{{ tls_ver2 }}</td></tr>
+            <tr><td>Handshake Version</td><td>{{ ch_ver1 }}</td>
+                                    <td{% if ch_ver1 != ch_ver2 %} class="diff"{% endif %}>{{ ch_ver2 }}</td></tr>
+            <tr><td>Cipher Suites</td>
+                <td>{% for cs in ciphers_diff %}
+                        {% if cs.inserted %}<span>
+                        {% else %}
+                            {% if cs.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            <a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for cs in ciphers_diff %}
+                        {% if cs.removed %}<span>
+                        {% else %}
+                            {% if cs.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            <a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Compression Methods</td><td>{% for c in comps %}{{ c.s }}<br/>{% endfor %}</td>
+                <td>{% for c in comps_diff %}
+                    <span{% if c.inserted %} class="inserted">+ {% elif c.removed %} class="removed">- {% else %}>{% endif%}{{ c.s }}</span></br>
+                    {% endfor %}</td>
+            </tr>
+            <tr><td>Extensions</td>
+                <td>{% for e in extensions_diff %}
+                        {% if e.inserted %}<span>
+                        {% else %}
+                            {% if e.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+                <td>{% for e in extensions_diff %}
+                        {% if e.removed %}<span>
+                        {% else %}
+                            {% if e.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+            <tr><td>Supported Groups</td>
+                <td>{% for e in curves_diff %}
+                        {% if e.inserted %}<span>
+                        {% else %}
+                            {% if e.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+                <td>{% for e in curves_diff %}
+                        {% if e.removed %}<span>
+                        {% else %}
+                            {% if e.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+            <tr><td>Signature Algorithms</td>
+                <td>{% for sa in sigs_diff %}
+                        {% if sa.inserted %}<span>
+                        {% else %}
+                            {% if sa.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for sa in sigs_diff %}
+                        {% if sa.removed %}<span>
+                        {% else %}
+                            {% if sa.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>EC Point Formats</td>
+                <td>{% for sa in pt_fmts_diff %}
+                        {% if sa.inserted %}<span>
+                        {% else %}
+                            {% if sa.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for sa in pt_fmts_diff %}
+                        {% if sa.removed %}<span>
+                        {% else %}
+                            {% if sa.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>ALPN</td>
+                <td>{% for a in alpn_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in alpn_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Key Share</td>
+                <td>{% for a in key_share_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in key_share_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>PSK Key Exchange Modes</td>
+                <td>{% for a in psk_key_exchange_modes_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in psk_key_exchange_modes_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Supported Versions</td>
+                <td>{% for a in supported_versions_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in supported_versions_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Certificate Compression Algs</td>
+                <td>{% for a in cert_compression_algs_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in cert_compression_algs_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Record Size Limit</td>
+                <td>{% for a in record_size_limit_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in record_size_limit_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <!--
+            <tr><td>nid</td><td>{{ nid1 }}</td><td>{{ nid2 }}</td></tr>
+
+            <tr><td>Labels</td><td>{% for l in labels1 %}
+                    <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
+                    {% endfor %}</td>
+                <td>{% for l in labels2 %}
+                    <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
+                    {% endfor %}</td>
+            </tr>-->
+
+            <!--<tr><td></td>
+                <td><div class="graph" id="graph1">
+                    <canvas width=640 height=400 yformat=".2s"></canvas>
+                    <script src="/idgraph.js/measurements/{{ hid1 }}/graph1"></script>
+                </div></td>
+                <td><div class="graph" id="graph2">
+                    <canvas width=640 height=400 yformat=".2s"></canvas>
+                    <script src="/idgraph.js/measurements/{{ hid2 }}/graph2"></script>
+                </div></td>
+            </tr>-->
+
+            <!--<tr><td>User Agents</td>
+                <td>{% for ua in useragents1 %}{{ ua }}<br/>
+                    {% endfor %}</td>
+                <td>{% for ua in useragents2 %}{{ ua }}<br/>
+                    {% endfor %}</td>
+            </tr>-->
+          </tbody>
+        </table>
+
+      </div>
+    </body>
+</html>
+

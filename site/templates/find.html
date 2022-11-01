@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %} - Find{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+     <div class="row">
+      <div class="col-12">
+              <h1><tt>{{ thing }}</tt> {{ comparator }} <tt>{% if id_n is not none %} 0x{{ '%04x' % id_n }}{% endif %} ({{ id_str }})</tt></h1>
+        <b>In {{ '{0:,}'.format(num_seen|int) }} fingerprints ({{ '%0.1f' % (100*(this_seen_total|float)/total_seen)}}% of connections) in the past week</b><br/>
+        {% if id_n is not none %}
+            <h3>Percent seen over time (24 hour averaged)</h3>
+            <div id="graph">
+              <canvas ylabel="Percent Connections" yformat=".1f" yrange="0,100" width=960 height=500></canvas>
+              <script src="/idgraph.js/data/find/{{ tbl }}/{{ '%04x' % id_n }}/graph"></script>
+            </div>
+        {% endif %}
+        </div>
+     </div>
+     <div class="row">
+      <div class="col-5">
+        <h3>Top Fingerprints</h3>
+        <table class="table table-condensed table-sm table-striped">
+          <thead>
+            <tr>
+            <th>ID</th>
+            <th>Cluster #</th>
+            <th>Connections</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in fingerprints %}
+              <tr>
+                <td><a href="/id/{{ d.hid }}">{{ d.hid }}</a></td>
+                <td>{% if d.cluster is not none %}<a href="/cluster/{{ d.hid }}">Cluster #{{ d.cluster }}</a>{% endif %}</td>
+                <td>{{ '%.1f'|format(100*d.frac|float) }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if fingerprints|length != num_seen %}
+        ...and {{ num_seen - fingerprints|length }} more<br/>
+        {% endif %}
+      </div>
+    </div>
+    </main>
+{% endblock %}

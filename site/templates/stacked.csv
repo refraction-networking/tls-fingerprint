@@ -1,0 +1,2 @@
+{% for rows in data %}{% for d in rows %}{{ d }},{% endfor %}
+{% endfor %}

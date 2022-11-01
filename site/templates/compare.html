@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %} - Compare{% endblock %}
+{% block content %}
+
+    <style>
+        .diff {
+            background-color: #cc0;
+        }
+
+        .inserted {
+            background-color: #acf2bd;
+        }
+
+        .removed {
+            background-color: #fdb8c0;
+        }
+
+        .container {
+            max-width: 2000px;
+        }
+    </style>
+
+
+
+      <div class="col-12">
+        <table class="table">
+          <tbody>
+            <tr><td>Compare</td><td><h3><a href="/id/{{ hid1 }}">{{ hid1 }}</a></h3></td>
+                    <td><h3><a href="/id/{{ hid2 }}">{{ hid2 }}</a></h3></td>
+            <tr><td>Seen</td><td>{{ seen1 }} times ({{'%0.2f'|format(frac1|float)}}%)</td>
+                             <td>{{ seen2 }} times ({{'%0.2f'|format(frac2|float)}}%)</td></tr>
+            <tr><td>Rank</td><td>{{ rank1 }}</td>
+                             <td>{{ rank2 }}</td></tr>
+            <tr><td>TLS Version</td><td>{{ tls_ver1 }}</td>
+                                    <td{% if tls_ver1 != tls_ver2 %} class="diff"{% endif %}>{{ tls_ver2 }}</td></tr>
+            <tr><td>Handshake Version</td><td>{{ ch_ver1 }}</td>
+                                    <td{% if ch_ver1 != ch_ver2 %} class="diff"{% endif %}>{{ ch_ver2 }}</td></tr>
+            <tr><td>Cipher Suites</td>
+                <td>{% for cs in ciphers_diff %}
+                        {% if cs.inserted %}<span>
+                        {% else %}
+                            {% if cs.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            <a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for cs in ciphers_diff %}
+                        {% if cs.removed %}<span>
+                        {% else %}
+                            {% if cs.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            <a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Compression Methods</td><td>{% for c in comps %}{{ c.s }}<br/>{% endfor %}</td>
+                <td>{% for c in comps_diff %}
+                    <span{% if c.inserted %} class="inserted">+ {% elif c.removed %} class="removed">- {% else %}>{% endif%}{{ c.s }}</span></br>
+                    {% endfor %}</td>
+            </tr>
+            <tr><td>Extensions</td>
+                <td>{% for e in extensions_diff %}
+                        {% if e.inserted %}<span>
+                        {% else %}
+                            {% if e.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+                <td>{% for e in extensions_diff %}
+                        {% if e.removed %}<span>
+                        {% else %}
+                            {% if e.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+            <tr><td>Supported Groups</td>
+                <td>{% for e in curves_diff %}
+                        {% if e.inserted %}<span>
+                        {% else %}
+                            {% if e.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+                <td>{% for e in curves_diff %}
+                        {% if e.removed %}<span>
+                        {% else %}
+                            {% if e.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ e.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+            <tr><td>Signature Algorithms</td>
+                <td>{% for sa in sigs_diff %}
+                        {% if sa.inserted %}<span>
+                        {% else %}
+                            {% if sa.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for sa in sigs_diff %}
+                        {% if sa.removed %}<span>
+                        {% else %}
+                            {% if sa.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>EC Point Formats</td>
+                <td>{% for sa in pt_fmts_diff %}
+                        {% if sa.inserted %}<span>
+                        {% else %}
+                            {% if sa.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for sa in pt_fmts_diff %}
+                        {% if sa.removed %}<span>
+                        {% else %}
+                            {% if sa.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ sa.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>ALPN</td>
+                <td>{% for a in alpn_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in alpn_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Key Share</td>
+                <td>{% for a in key_share_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in key_share_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>PSK Key Exchange Modes</td>
+                <td>{% for a in psk_key_exchange_modes_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in psk_key_exchange_modes_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Supported Versions</td>
+                <td>{% for a in supported_versions_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in supported_versions_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Certificate Compression Algs</td>
+                <td>{% for a in cert_compression_algs_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in cert_compression_algs_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+            <tr><td>Record Size Limit</td>
+                <td>{% for a in record_size_limit_diff %}
+                        {% if a.inserted %}<span>
+                        {% else %}
+                            {% if a.removed %}<span class="removed">- 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+
+                <td>{% for a in record_size_limit_diff %}
+                        {% if a.removed %}<span>
+                        {% else %}
+                            {% if a.inserted %}<span class="inserted">+ 
+                            {% else %}<span>{% endif %}
+                            {{ a.s }}</a>
+                        {% endif %}
+                        </span><br/>
+                    {% endfor %}
+                </td>
+            </tr>
+
+
+            <tr><td>nid</td><td>{{ nid1 }}</td><td>{{ nid2 }}</td></tr>
+
+            <tr><td>Labels</td><td>{% for l in labels1 %}
+                    <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
+                    {% endfor %}</td>
+                <td>{% for l in labels2 %}
+                    <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
+                    {% endfor %}</td>
+            </tr>
+
+            <tr><td></td>
+                <td><div class="graph" id="graph1">
+                    <canvas width=640 height=400 yformat=".2s"></canvas>
+                    <script src="/idgraph.js/measurements/{{ hid1 }}/graph1"></script>
+                </div></td>
+                <td><div class="graph" id="graph2">
+                    <canvas width=640 height=400 yformat=".2s"></canvas>
+                    <script src="/idgraph.js/measurements/{{ hid2 }}/graph2"></script>
+                </div></td>
+            </tr>
+
+            <tr><td>User Agents</td>
+                <td>{% for ua in useragents1 %}{{ ua }}<br/>
+                    {% endfor %}</td>
+                <td>{% for ua in useragents2 %}{{ ua }}<br/>
+                    {% endfor %}</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+
+{% endblock %}
+
