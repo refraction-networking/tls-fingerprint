@@ -40,10 +40,12 @@ pub struct FlowTracker {
     // Keys present in this map are flows we parse ServerHello from
     tracked_server_flows: HashMap<Flow, i64>,
     stale_server_drops: VecDeque<TimedFlow>,
+
+    pub gre_offset: usize,
 }
 
 impl FlowTracker {
-    pub fn new() -> FlowTracker {
+    pub fn new(gre_offset: usize) -> FlowTracker {
         FlowTracker {
             flow_timeout: Duration::from_secs(20),
             tracked_flows: HashSet::new(),
@@ -55,10 +57,11 @@ impl FlowTracker {
             cache: MeasurementCache::new(),
             stats: StatsTracker::new(),
             dsn: None,
+            gre_offset: gre_offset,
         }
     }
 
-    pub fn new_db(dsn: String, core_id: i8, total_cores: i32) -> FlowTracker {
+    pub fn new_db(dsn: String, core_id: i8, total_cores: i32, gre_offset: usize) -> FlowTracker {
         // TODO: (convinience) try to connect to DB and run any query, verifying credentials
         // right away
 
@@ -73,6 +76,7 @@ impl FlowTracker {
             cache: MeasurementCache::new(),
             stats: StatsTracker::new(),
             dsn: Some(dsn),
+            gre_offset: gre_offset,
         };
         // flush to db at different time on different cores
         ft.cache.last_flush = ft.cache.last_flush.sub(time::Duration::seconds(
@@ -220,7 +224,7 @@ impl FlowTracker {
                         self.cache.update_connection_with_sid(&flow.reversed_clone(), sid);
                     }
                 }
-                Err(err) => {}
+                Err(_err) => {}
             }
             self.tracked_server_flows.remove(&flow);
         }
@@ -391,7 +395,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
         });
     }
 
-    fn begin_tracking_flow(&mut self, flow: &Flow, syn_data: Vec<u8>) {
+    fn begin_tracking_flow(&mut self, flow: &Flow, _syn_data: Vec<u8>) {
         // Always push back, even if the entry was already there. Doesn't hurt
         // to do a second check on overdueness, and this is simplest.
         self.stale_drops.push_back(TimedFlow {
