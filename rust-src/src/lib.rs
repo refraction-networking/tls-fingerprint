@@ -17,7 +17,6 @@ use libc::size_t;
 
 use libc::c_char;
 use std::ffi::CStr;
-use std::str;
 
 use std::os::raw::c_void;
 use std::mem::transmute;

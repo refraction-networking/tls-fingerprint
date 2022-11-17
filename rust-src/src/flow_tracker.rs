@@ -8,18 +8,17 @@ use pnet::packet::ethernet::{EthernetPacket};
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::tcp::{TcpPacket, TcpFlags, ipv4_checksum, ipv6_checksum};
 use pnet::packet::ipv6::Ipv6Packet;
-use pnet::packet::{Packet, PacketSize};
+use pnet::packet::{Packet};
 
-use std::mem;
 use std::ops::Sub;
 
 use std::time::{Duration, Instant};
 use tls_parser::{ClientHelloFingerprint, ServerHelloFingerprint};
 use cache::{MeasurementCache, MEASUREMENT_CACHE_FLUSH};
 use stats_tracker::{StatsTracker};
-use common::{u8_to_u16_be, u8array_to_u32_be, u8_to_u32_be, TimedFlow, Flow, HelloParseError};
+use common::{TimedFlow, Flow};
 
-use postgres::{Connection, TlsMode};
+use postgres::{Client, NoTls};
 
 use std::thread;
 
@@ -239,7 +238,7 @@ impl FlowTracker {
         let dsn = self.dsn.clone().unwrap();
         thread::spawn(move || {
             let inserter_thread_start = time::now();
-            let thread_db_conn = Connection::connect(dsn, TlsMode::None).unwrap();
+            let mut thread_db_conn = Client::connect(&dsn, NoTls).unwrap();
 
             // TODO: format these strings to match indentation
             let insert_fingerprint = match thread_db_conn.prepare("INSERT
@@ -325,7 +324,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             };
 
             for (fp_id, fp) in client_fcache {
-                let updated_rows = insert_fingerprint.execute(&[&(fp_id as i64),
+                let updated_rows = thread_db_conn.execute(&insert_fingerprint, &[&(fp_id as i64),
                     &(fp.record_tls_version as i16), &(fp.ch_tls_version as i16),
                     &fp.cipher_suites, &fp.compression_methods, &fp.extensions,
                     &fp.named_groups, &fp.ec_point_fmt, &fp.sig_algs, &fp.alpn,
@@ -337,7 +336,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for (k, count) in client_mcache {
-                let updated_rows = insert_measurement.execute(&[&(k.1), &(k.0),
+                let updated_rows = thread_db_conn.execute(&insert_measurement, &[&(k.1), &(k.0),
                     &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating measurements: {:?}", updated_rows);
@@ -345,7 +344,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for (sid, fp) in server_fcache {
-                let updated_rows = insert_sfingerprint.execute(&[&(sid as i64),
+                let updated_rows = thread_db_conn.execute(&insert_sfingerprint, &[&(sid as i64),
                     &(fp.record_tls_version as i16), &(fp.sh_tls_version as i16),
                     &(fp.cipher_suite as i16), &(fp.compression_method as i8), &fp.extensions,
                     &fp.elliptic_curves, &fp.ec_point_fmt, &fp.alpn]);
@@ -355,7 +354,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for (k, count) in server_mcache {
-                let updated_rows = insert_smeasurement.execute(&[&(k.0), &(k.1),
+                let updated_rows = thread_db_conn.execute(&insert_smeasurement, &[&(k.0), &(k.1),
                     &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating smeasurements: {:?}", updated_rows);
@@ -363,7 +362,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for ipv4c in c4cache {
-                let updated_rows = insert_ipv4conn.execute(&[&(ipv4c.id as i64), &(ipv4c.sid as i64),
+                let updated_rows = thread_db_conn.execute(&insert_ipv4conn, &[&(ipv4c.id as i64), &(ipv4c.sid as i64),
                     &(ipv4c.anon_cli_ip), &(ipv4c.serv_ip), &(ipv4c.sni)]);
                 if updated_rows.is_err() {
                     println!("Error updating ipv4connections: {:?}", updated_rows);
@@ -371,7 +370,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for ipv6c in c6cache {
-                let updated_rows = insert_ipv6conn.execute(&[&(ipv6c.id as i64), &(ipv6c.sid as i64),
+                let updated_rows = thread_db_conn.execute(&insert_ipv6conn, &[&(ipv6c.id as i64), &(ipv6c.sid as i64),
                     &(ipv6c.anon_cli_ip), &(ipv6c.serv_ip), &(ipv6c.sni)]);
                 if updated_rows.is_err() {
                     println!("Error updating ipv6connections: {:?}", updated_rows);
@@ -379,7 +378,7 @@ ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
             }
 
             for (k, count) in ticket_sizes {
-                let updated_rows = insert_ticket_size.execute(&[&(k.0 as i64),
+                let updated_rows = thread_db_conn.execute(&insert_ticket_size, &[&(k.0 as i64),
                     &(k.1 as i16), &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating ticket sizes: {:?}", updated_rows);
