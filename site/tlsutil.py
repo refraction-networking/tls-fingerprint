@@ -432,6 +432,8 @@ ext_dict = {
 
   0x001b: "compressed_certificate", # draft
   0x001c: "record_size_limit", # draft
+  0x0022: "delegated_credential" # draft
+  0x4469: "application_settings", # draft
 
   0x0a0a: "GREASE",
   0x5500: "LEGACY_token_binding",    # https://community.qualys.com/thread/15849
