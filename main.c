@@ -48,8 +48,8 @@ int g_update_overloaded_decoys_when_convenient = 0;
 
 #define TIMESPEC_DIFF(a, b) ((a.tv_sec - b.tv_sec)*1000000000LL + \
                              ((int64_t)a.tv_nsec - (int64_t)b.tv_nsec))
-void the_program(uint8_t core_id, unsigned int log_interval, char* db_source_name) {
-    struct RustGlobalsStruct rust_globals = rust_init(core_id, g_num_worker_procs, db_source_name);
+void the_program(uint8_t core_id, unsigned int log_interval, char* db_source_name, int gre_offset) {
+    struct RustGlobalsStruct rust_globals = rust_init(core_id, g_num_worker_procs, db_source_name, gre_offset);
     void* rust_ptr = (void*) &rust_globals;
 
     printf("Zero-copy TLS ClientHello Analyzer child proc started on core %d!\n", core_id);
@@ -195,7 +195,7 @@ void startup_pfring_maybezc(unsigned int cluster_id, int proc_ind, int cluster_q
 }
 
 pid_t start_process(int core_affinity, unsigned int cluster_id,
-                             int proc_ind, unsigned int log_interval, char* db_source_name, int cluster_queue_offset)
+                             int proc_ind, unsigned int log_interval, char* db_source_name, int cluster_queue_offset, int gre_offset)
 {
     pid_t the_pid = fork();
     if(the_pid == 0)
@@ -207,7 +207,7 @@ pid_t start_process(int core_affinity, unsigned int cluster_id,
         signal(SIGINT, sigproc_child);
         signal(SIGTERM, sigproc_child);
         signal(SIGPIPE, ignore_sigpipe);
-        the_program(proc_ind, log_interval, db_source_name);
+        the_program(proc_ind, log_interval, db_source_name, gre_offset);
     }
     printf("Core %d: PID %d, lcore %d\n", proc_ind, the_pid, core_affinity);
     return the_pid;
@@ -236,6 +236,8 @@ struct cmd_options
     int             skip_core;    // -1 if not skipping any core, otherwise the core to skip
 
     char*           db_source_name; // DSN for SQL database
+
+    size_t          gre_offset; // Offset to drop packet headers (GRE, ERSPAN, etc)
 };
 
 void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
@@ -245,17 +247,17 @@ void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
     options->cluster_id = 987654321;
     options->core_affinity_offset = 0;
     options->log_interval = 1000; // milliseconds
+    options->gre_offset = 0;
     int skip_core = -1; // If >0, skip this core when incrementing
-    char* db_source_name = 0;
 
     char c;
-    while ((c = getopt(argc,argv,"n:m:c:d:o:l:s:")) != -1)
+    while ((c = getopt(argc,argv,"n:m:c:d:o:l:s:g:")) != -1)
     {
         switch (c)
         {
-	        case 'm':
-		        options->cluster_queue_offset = atoi(optarg);
-		        break;
+            case 'm':
+                options->cluster_queue_offset = atoi(optarg);
+                break;
             case 'n':
                 cpu_procs_i32 = atoi(optarg);
                 break;
@@ -274,6 +276,9 @@ void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
             case 's':
                 skip_core = atoi(optarg);
                 break;
+            case 'g':
+		options->gre_offset = atoi(optarg);
+		break;
             default:
                 fprintf(stderr, "Unknown option %c\n", c);
                 break;
@@ -334,7 +339,7 @@ int main(int argc, char* argv[]) {
 
         if (core_num == options.skip_core) core_num++;
         g_forked_pids[i] = start_process(core_num, options.cluster_id, i,
-            options.log_interval, options.db_source_name, options.cluster_queue_offset);
+            options.log_interval, options.db_source_name, options.cluster_queue_offset, options.gre_offset);
         core_num++;
     }
     signal(SIGINT, sigproc_parent);

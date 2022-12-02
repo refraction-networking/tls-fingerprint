@@ -3,11 +3,9 @@ extern crate hex_slice;
 extern crate crypto;
 extern crate byteorder;
 
-use std::str;
 use std::fmt;
 use self::num::FromPrimitive;
 use self::hex_slice::AsHex;
-use std::hash::{Hash, Hasher};
 use self::crypto::digest::Digest;
 use self::crypto::sha1::Sha1;
 use self::byteorder::{ByteOrder, BigEndian};

@@ -2,12 +2,9 @@ extern crate time;
 extern crate crypto;
 
 use std::net::IpAddr;
-use pnet::packet::ipv4::Ipv4Packet;
-use pnet::packet::tcp::{TcpPacket, TcpFlags, ipv4_checksum, ipv6_checksum};
-use pnet::packet::ipv6::Ipv6Packet;
-use pnet::packet::{Packet, PacketSize};
+use pnet::packet::tcp::{TcpPacket};
 use self::crypto::digest::Digest;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum HelloParseError {

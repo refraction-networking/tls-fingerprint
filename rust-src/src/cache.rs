@@ -1,8 +1,7 @@
 extern crate time;
 
-use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::{HashSet, HashMap};
 use std::mem;
-use std::time::{Duration, Instant};
 use common::{Flow, ConnectionIPv6, ConnectionIPv4, u8_to_u16_be, u8_to_u32_be, u8array_to_u32_be};
 use std::net::IpAddr;
 use tls_parser::{ClientHelloFingerprint, ServerHelloFingerprint};
