@@ -10,7 +10,7 @@ use self::crypto::digest::Digest;
 use self::crypto::sha1::Sha1;
 use self::byteorder::{ByteOrder, BigEndian};
 
-use common::{u8_to_u16_be, u8_to_u32_be, vec_u8_to_vec_u16_be, hash_u32, HelloParseError};
+use common::{u8_to_u16_be, u8_to_u32_be, vec_u8_to_vec_u16_be, vec_u16_to_vec_u8_be, hash_u32, HelloParseError};
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -217,6 +217,7 @@ impl ClientHelloFingerprint {
                 None => return Err(HelloParseError::ExtensionLenExceedBuf),
             };
         }
+        ch.sort_extensions();
         Ok(ch)
     }
 
@@ -298,9 +299,13 @@ impl ClientHelloFingerprint {
         };
 
         self.extensions.append(&mut ungrease_u8(ext_id_u8));
-        self.extensions_norm.append(&mut ungrease_u8(ext_id_u8));
-        self.extensions_norm.sort();
         Ok(())
+    }
+
+    pub fn sort_extensions(&mut self) {
+        let mut extensions = vec_u8_to_vec_u16_be(&self.extensions);
+        extensions.sort();
+        self.extensions_norm = vec_u16_to_vec_u8_be(&extensions);
     }
 
     pub fn get_fingerprint(&self, normalized_ext: bool) -> u64 {
