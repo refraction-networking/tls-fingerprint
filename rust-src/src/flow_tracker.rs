@@ -388,7 +388,7 @@ impl FlowTracker {
                 updated_rows = thread_db_conn.execute(&insert_fingerprint_norm_ext, &[
                     &(norm_ext_fp_id as i64),
                     &(fp.record_tls_version as i16), &(fp.ch_tls_version as i16),
-                    &fp.cipher_suites, &fp.compression_methods, &fp.extensions,
+                    &fp.cipher_suites, &fp.compression_methods, &fp.extensions_norm,
                     &fp.named_groups, &fp.ec_point_fmt, &fp.sig_algs, &fp.alpn,
                     &fp.key_share, &fp.psk_key_exchange_modes, &fp.supported_versions,
                     &fp.cert_compression_algs, &fp.record_size_limit,
