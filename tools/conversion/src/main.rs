@@ -9,6 +9,54 @@ use std::error::Error;
 fn main() -> Result<(), Box<dyn Error>> {
     let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
 
+
+    let insert_fingerprint_norm_ext = match client.prepare(
+        "INSERT
+        INTO fingerprints_norm_ext (
+            id,
+            record_tls_version,
+            ch_tls_version,
+            cipher_suites,
+            compression_methods,
+            normalized_extensions,
+            named_groups,
+            ec_point_fmt,
+            sig_algs,
+            alpn,
+            key_share,
+            psk_key_exchange_modes,
+            supported_versions,
+            cert_compression_algs,
+            record_size_limit
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO NOTHING;"
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            println!("Preparing insert_fingerprint_norm_ext failed: {}", e);
+            return Err(Box::new(e))
+        }
+    };
+
+    let insert_fingerprint_mapping = match client.prepare(
+        "INSERT
+        INTO fingerprint_map (
+            id,
+            norm_ext_id,
+            extensions
+        )
+        VALUES ($1, $2, $3)
+        ON CONFLICT ON CONSTRAINT fingerprint_map_pkey DO UPDATE
+        SET count = fingerprint_map.count + 1;"
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            println!("Preparing insert_fingerprint_map failed: {}", e);
+            return Err(Box::new(e));
+        }
+    };
+
     for row in client.query(
         "SELECT
             id,
@@ -30,7 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             fingerprints", 
         &[]
     )? {
-        let id: i64 = row.get(0);
+        let id_raw: i64 = row.get(0);
+        let id = id_raw as u64;
         let record_tls_version: i16 = row.get(1);
         let ch_tls_version: i16 = row.get(2);
         let cipher_suites_raw: Option<&[u8]> = row.get(3);
@@ -94,7 +143,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             &record_size_limit,
         );
 
-        println!("Recorded: {:?}, Original: {:?}, Normalized: {:?}", id, original_fingerprint, normalized_fingerprint);
+        let mut updated_rows = client.execute(&insert_fingerprint_norm_ext, &[
+            &(normalized_fingerprint as i64),
+            &(record_tls_version as i16), &(ch_tls_version as i16),
+            &cipher_suites, &compression_methods, &sorted_extensions,
+            &named_groups, &ec_point_fmt, &sig_algs, &alpn,
+            &key_share, &psk_key_exchange_modes, &supported_versions,
+            &cert_compression_algs, &record_size_limit,
+        ]);
+        if updated_rows.is_err() {
+            println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
+        }
+
+        updated_rows = client.execute(&insert_fingerprint_mapping, &[
+            &(original_fingerprint as i64),
+            &(normalized_fingerprint as i64),
+            &extensions,
+        ]);
+        if updated_rows.is_err() {
+            println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
+        }
     }
     Ok(())
 }
