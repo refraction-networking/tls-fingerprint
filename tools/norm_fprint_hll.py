@@ -1,21 +1,14 @@
-from tlsutil import *
-
-
 import math
 import hashlib
-import sys
-sys.setrecursionlimit(10000)
-import pickle
 from prod import db
-import random
-import time
+from collections import defaultdict
+
 db = db.get_conn_cur()
 
-from collections import defaultdict
+m = 16  # If updated, need to update h() and estimate()
 
 norm_count = defaultdict(int)    #norm_ext_id => number unique fingerprints (true count)
 
-m = 16
 registers = defaultdict(list)   # norm_ext_id => list of m registers of integer counts
 
 # warning: little endian
@@ -34,7 +27,6 @@ def h(exts):
     idx = (out[0] & 0xf0) >> 4
     out[0] &= 0x0f
     return idx, pos(out) - 4 # subtract 4, because the first 4 bits were zeroed out
-
 
 db.cur.execute('''select id, norm_ext_id, extensions from fingerprint_map''')
 for row in db.cur.fetchall():
@@ -63,15 +55,9 @@ def estimate(regs):
         return m*math.log(m / V)
     return est
 
-
 for nfp in norm_count.keys():
     est = estimate(registers[nfp])
     actual = norm_count[nfp]
     err = abs(est-actual)/actual
     print('%s %d %.2f %.6f %s' % (nfp, actual, est, err, registers[nfp]))
 
-    
-
-
-
-#db.conn.commit()
