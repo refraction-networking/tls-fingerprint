@@ -290,8 +290,18 @@ greatest_bytea(PG_FUNCTION_ARGS)
         ereport(ERROR, (errmsg("inputs must be the same length")));
     }
 
+    // In place
+    int i;
+    for (i=0; i<b1_len; i++) {
+        if (b2[i] > b1[i]) {
+            b1[i] = b2[i];
+        }
+    }
+    PG_RETURN_BYTEA_P(arg1);
+
+    /*
     bytea *result = (bytea *) palloc(VARHDRSZ+b1_len);
-    SET_VARSIZE(result, b1_len);
+    SET_VARSIZE(result, VARHDRSZ+b1_len);
 
     uint8_t *p = VARDATA(result);
     memcpy(p, b1, b1_len);
@@ -303,4 +313,5 @@ greatest_bytea(PG_FUNCTION_ARGS)
     }
 
     PG_RETURN_BYTEA_P(result);
+    */
 }
