@@ -5,7 +5,7 @@ from collections import defaultdict
 
 db = db.get_conn_cur()
 
-m = 16  # If updated, need to update h() and estimate()
+m = 128  # If updated, need to update h() and estimate()
 
 norm_count = defaultdict(int)    #norm_ext_id => number unique fingerprints (true count)
 
@@ -22,11 +22,19 @@ def pos(b):
 
 
 # hardcode m=16
-def h(exts):
+def h16(exts):
     out = bytearray(hashlib.sha256(exts).digest())
     idx = (out[0] & 0xf0) >> 4
     out[0] &= 0x0f
     return idx, pos(out) - 4 # subtract 4, because the first 4 bits were zeroed out
+
+# hardcode m=128
+def h128(exts):
+    out = bytearray(hashlib.sha256(exts).digest())
+    idx = (out[0] & 0xfe) >> 1
+    out[0] &= 0x01
+    return idx, pos(out) - 7 # subtract 7, because the first 4 bits were zeroed out
+
 
 db.cur.execute('''select id, norm_ext_id, extensions from fingerprint_map''')
 for row in db.cur.fetchall():
@@ -41,13 +49,14 @@ for row in db.cur.fetchall():
     if len(regs) != m:
         regs = [0]*m
     
-    ridx, p = h(exts)
+    ridx, p = h128(exts)
     regs[ridx] = max(regs[ridx], p)
 
     registers[nfid] = regs
 
 def estimate(regs):
-    a_m = 0.673 # for m=16, from https://en.wikipedia.org/wiki/HyperLogLog
+    #a_m = 0.673 # for m=16, from https://en.wikipedia.org/wiki/HyperLogLog
+    a_m = 0.7213 / (1+(1.079/m))
     Z = 1.0 / sum([2**-r for r in regs])
     est = a_m * m*m * Z
     if est < (2.5*m):
