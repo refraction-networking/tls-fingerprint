@@ -1,7 +1,7 @@
 
 CFLAGS += -I/home/ewust/postgresql-9.5.10/src/include/
 #bump this for each new make install, or psql will crash and delete your data...
-VERSION=1.0
+VERSION=1.1
 
 pfunc.so: pfunc.c
 	$(CC) $(CFLAGS) -fpic -O3 -c $^
