@@ -323,15 +323,12 @@ hll_count(PG_FUNCTION_ARGS)
 {
     bytea *arg1 = PG_GETARG_BYTEA_P(0);
 
-
     uint8_t *regs = VARDATA(arg1);
 
     size_t m = VARSIZE(arg1)-VARHDRSZ;
 
-
     // a_m estimation from: https://en.wikipedia.org/wiki/HyperLogLog
-    int64_t a_m;
-
+    double a_m;
     switch(m) {
         case 16:
             a_m = 0.673;
@@ -343,16 +340,34 @@ hll_count(PG_FUNCTION_ARGS)
             a_m = 0.709;
             break;
         default:
+            if (m < 128) {
+                ereport(ERROR, (errmsg("invalid m, must be 16,32,64,>=128")));
+            }
             a_m = 0.7213 / (1+(1.079/m));
     }
-    
-    int i;
 
-    int64_t z = 0;
+    double z = 0.0;
+    int i;
     for (i=0; i<m; i++) {
-        z += pow(2, -regs[1]);
+        z += pow(2.0, (double)-regs[i]);
     }
     z = 1.0 / z;
-    int64_t count = a_m * (m*m) * z;
-    PG_RETURN_INT64(count);
+
+    // Estimate
+    double est = a_m * m * m * z;
+
+    // If estimate is small, do linear counting
+    if (est < (2.5*m)) {
+        // Linear counting
+        int v = 0;
+        for (i=0; i<m; i++) {
+            if (regs[i]==0) {
+                v++;
+            }
+        }
+        est = m*log(((double)m)/v);
+    }
+
+    // Round down to int
+    PG_RETURN_INT64((int64_t)est);
 }
