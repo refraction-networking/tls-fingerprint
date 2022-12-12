@@ -10,7 +10,7 @@ const IDX_MASK: u8 = 0xff ^ MASK;
 fn main() -> Result<(), Box<dyn Error>> {
     let mut norm_fp_counts = HashMap::new();
 
-    let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+    let mut client = Client::connect("host=localhost dbname=tls_clienthellos13 user=postgres", NoTls)?;
 
     let insert_fingerprint_count_est = match client.prepare(
         "INSERT
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         VALUES ($1, $2)
         ON CONFLICT (norm_fp_id) DO UPDATE
-        SET regs = greatest_bytea(fingerprint_count_est.regs, $1);"
+        SET regs = greatest_bytea(fingerprint_count_est.regs, $2);"
     ) {
         Ok(stmt) => stmt,
         Err(e) => {
@@ -42,7 +42,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         update_norm_count(norm_fp_id, id, &mut norm_fp_counts);
     }
+
+    println!("Done populating HashMap, inserting into DB");
     
+    let mut count = 0;
     for (norm_fp_id, regs) in norm_fp_counts {
         let updated_rows = client.execute(&insert_fingerprint_count_est, &[
             &(norm_fp_id),
@@ -50,6 +53,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ]);
         if updated_rows.is_err() {
             println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
+        }
+        count += 1;
+        if count % 100000 == 0 {
+            println!("Rows inserted: {:?}", count);
         }
     }
     Ok(())
