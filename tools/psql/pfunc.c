@@ -1,4 +1,3 @@
-#include <math.h>
 
 #include "postgres.h"
 #include "fmgr.h"
@@ -315,44 +314,4 @@ greatest_bytea(PG_FUNCTION_ARGS)
 
     PG_RETURN_BYTEA_P(result);
     */
-}
-
-PG_FUNCTION_INFO_V1(hll_count);
-Datum
-hll_count(PG_FUNCTION_ARGS)
-{
-    bytea *arg1 = PG_GETARG_BYTEA_P(0);
-
-
-    uint8_t *regs = VARDATA(arg1);
-
-    size_t m = VARSIZE(arg1)-VARHDRSZ;
-
-
-    // a_m estimation from: https://en.wikipedia.org/wiki/HyperLogLog
-    int64_t a_m;
-
-    switch(m) {
-        case 16:
-            a_m = 0.673;
-            break;
-        case 32:
-            a_m = 0.697;
-            break;
-        case 64:
-            a_m = 0.709;
-            break;
-        default:
-            a_m = 0.7213 / (1+(1.079/m));
-    }
-    
-    int i;
-
-    int64_t z = 0;
-    for (i=0; i<m; i++) {
-        z += pow(2, -regs[1]);
-    }
-    z = 1.0 / z;
-    int64_t count = a_m * (m*m) * z;
-    PG_RETURN_INT64(count);
 }

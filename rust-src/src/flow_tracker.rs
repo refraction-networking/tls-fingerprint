@@ -13,7 +13,7 @@ use pnet::packet::{Packet};
 use std::ops::Sub;
 
 use std::time::{Duration, Instant};
-use tls_parser::{ClientHelloFingerprint};
+use tls_parser::{ClientHelloFingerprint, ServerHelloFingerprint};
 use cache::{MeasurementCache, MEASUREMENT_CACHE_FLUSH};
 use stats_tracker::{StatsTracker};
 use common::{TimedFlow, Flow};
@@ -164,8 +164,7 @@ impl FlowTracker {
             match ClientHelloFingerprint::from_try(tcp_pkt.payload()) {
                 Ok(fp) => {
                     self.stats.fingerprints_seen += 1;
-                    let fp_id = fp.get_fingerprint(false);
-                    let norm_fp_id = fp.get_fingerprint(true);
+                    let fp_id = fp.get_fingerprint();
 
                     self.begin_tracking_server_flow(&flow.reversed_clone(), fp_id as i64);
 
@@ -189,7 +188,7 @@ impl FlowTracker {
                         // insert current fingerprint and measurement
                         self.cache.add_connection(&flow, fp_id as i64,
                                                   fp.sni.to_vec(), curr_time.to_timespec().sec);
-                        self.cache.add_fingerprint(fp_id as i64, fp, norm_fp_id as i64);
+                        self.cache.add_fingerprint(fp_id as i64, fp);
 
                         curr_time.tm_nsec = 0; // privacy
                         curr_time.tm_sec = 0;
@@ -204,12 +203,38 @@ impl FlowTracker {
             self.tracked_flows.remove(&flow);
             return;
         }
+
+        // check for ServerHello
+        if !is_client && self.tracked_server_flows.contains_key(&flow) {
+            self.stats.sfingerprint_checks += 1;
+            match ServerHelloFingerprint::from_try(tcp_pkt.payload()) {
+                Ok(fp) => {
+                    self.stats.sfingerprints_seen += 1;
+                    let sid = fp.get_fingerprint() as i64;
+                    let cid = self.tracked_server_flows[&flow];
+
+                    if self.write_to_stdout {
+                        println!("ServerHello: {{ sid: {} cid: {} fp: {}}}",
+                                 sid, cid, fp);
+                    }
+
+                    if self.write_to_db {
+                        self.cache.add_sfingerprint(sid, fp);
+                        self.cache.add_smeasurement(cid, sid);
+                        self.cache.update_connection_with_sid(&flow.reversed_clone(), sid);
+                    }
+                }
+                Err(_err) => {}
+            }
+            self.tracked_server_flows.remove(&flow);
+        }
     }
 
     fn flush_to_db(&mut self) {
         let client_mcache = self.cache.flush_measurements();
         let client_fcache = self.cache.flush_fingerprints();
-        let client_ccache = self.cache.flush_dirty_norm_fps();
+        let server_mcache = self.cache.flush_smeasurements();
+        let server_fcache = self.cache.flush_sfingerprints();
         let c4cache = self.cache.flush_ipv4connections();
         let c6cache = self.cache.flush_ipv6connections();
         let ticket_sizes = self.cache.flush_ticket_sizes();
@@ -219,110 +244,25 @@ impl FlowTracker {
             let inserter_thread_start = time::now();
             let mut thread_db_conn = Client::connect(&dsn, NoTls).unwrap();
 
-            let insert_fingerprint_original = match thread_db_conn.prepare(
-                "INSERT
-                INTO fingerprints (
-                    id,
-                    record_tls_version,
-                    ch_tls_version,
-                    cipher_suites,
-                    compression_methods,
-                    extensions,
-                    named_groups,
-                    ec_point_fmt,
-                    sig_algs,
-                    alpn,
-                    key_share,
-                    psk_key_exchange_modes,
-                    supported_versions,
-                    cert_compression_algs,
-                    record_size_limit
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (id) DO NOTHING;"
-            ) {
+            // TODO: format these strings to match indentation
+            let insert_fingerprint = match thread_db_conn.prepare("INSERT
+INTO fingerprints (id, record_tls_version, ch_tls_version, cipher_suites, compression_methods, extensions, named_groups, ec_point_fmt, sig_algs, alpn,
+key_share, psk_key_exchange_modes, supported_versions, cert_compression_algs, record_size_limit)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+$11, $12, $13, $14, $15)
+ON CONFLICT (id) DO NOTHING;") {
                 Ok(stmt) => stmt,
                 Err(e) => {
-                    println!("Preparing insert_fingerprint_original failed: {}", e);
+                    println!("Preparing insert_fingerprint failed: {}", e);
                     return;
                 }
             };
 
-            let insert_fingerprint_norm_ext = match thread_db_conn.prepare(
-                "INSERT
-                INTO fingerprints_norm_ext (
-                    id,
-                    record_tls_version,
-                    ch_tls_version,
-                    cipher_suites,
-                    compression_methods,
-                    normalized_extensions,
-                    named_groups,
-                    ec_point_fmt,
-                    sig_algs,
-                    alpn,
-                    key_share,
-                    psk_key_exchange_modes,
-                    supported_versions,
-                    cert_compression_algs,
-                    record_size_limit
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (id) DO NOTHING;"
-            ) {
-                Ok(stmt) => stmt,
-                Err(e) => {
-                    println!("Preparing insert_fingerprint_norm_ext failed: {}", e);
-                    return;
-                }
-            };
-
-            let insert_fingerprint_count_est = match thread_db_conn.prepare(
-                "INSERT
-                INTO fingerprint_count_est (
-                    norm_fp_id,
-                    regs
-                )
-                VALUES ($1, $2)
-                ON CONFLICT (norm_fp_id) DO UPDATE
-                SET regs = greatest_bytea(fingerprint_count_est.regs, $1);"
-            ) {
-                Ok(stmt) => stmt,
-                Err(e) => {
-                    println!("Preparing insert_fingerprint_count_est failed: {}", e);
-                    return;
-                }
-            };
-
-            let insert_fingerprint_mapping = match thread_db_conn.prepare(
-                "INSERT
-                INTO fingerprint_map (
-                    id,
-                    norm_ext_id,
-                    extensions
-                )
-                VALUES ($1, $2, $3)
-                ON CONFLICT ON CONSTRAINT fingerprint_map_pkey DO UPDATE
-                SET count = fingerprint_map.count + 1;"
-            ) {
-                Ok(stmt) => stmt,
-                Err(e) => {
-                    println!("Preparing insert_fingerprint_map failed: {}", e);
-                    return;
-                }
-            };
-
-            let insert_measurement = match thread_db_conn.prepare(
-                "INSERT
-                INTO measurements (
-                    unixtime,
-                    id,
-                    count
-                )
-                VALUES ($1, $2, $3)
-                ON CONFLICT ON CONSTRAINT measurements_pkey1 DO UPDATE
-                SET count = measurements.count + $4;"
-            ) {
+            let insert_measurement = match thread_db_conn.prepare("INSERT
+INTO measurements (unixtime, id, count)
+VALUES ($1, $2, $3)
+ON CONFLICT ON CONSTRAINT measurements_pkey1 DO UPDATE
+  SET count = measurements.count + $4;") {
                 Ok(stmt) => stmt,
                 Err(e) => {
                     println!("Preparing insert_measurement failed: {}", e);
@@ -330,18 +270,33 @@ impl FlowTracker {
                 }
             };
 
-            let insert_ipv4conn = match thread_db_conn.prepare(
-                "INSERT
-                INTO ipv4connections (
-                    id,
-                    sid,
-                    anon_cli_ip,
-                    server_ip,
-                    SNI
-                )
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT DO NOTHING;"
-            ) {
+            let insert_sfingerprint = match thread_db_conn.prepare("INSERT
+INTO sfingerprints (id, record_tls_version, sh_tls_version, cipher_suite, compression_method, extensions, eliptic_curves, ec_point_fmt, alpn)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO NOTHING;") {
+                Ok(stmt) => stmt,
+                Err(e) => {
+                    println!("Preparing insert_sfingerprint failed: {}", e);
+                    return;
+                }
+            };
+
+            let insert_smeasurement = match thread_db_conn.prepare("INSERT
+INTO smeasurements (cid, sid, count)
+VALUES ($1, $2, $3)
+ON CONFLICT ON CONSTRAINT smeasurements_pkey DO UPDATE
+  SET count = smeasurements.count + $4;") {
+                Ok(stmt) => stmt,
+                Err(e) => {
+                    println!("Preparing insert_smeasurement failed: {}", e);
+                    return;
+                }
+            };
+
+            let insert_ipv4conn = match thread_db_conn.prepare("INSERT
+INTO ipv4connections (id, sid, anon_cli_ip, server_ip, SNI)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT DO NOTHING;") {
                 Ok(stmt) => stmt,
                 Err(e) => {
                     println!("Preparing insert_ipv4conn failed: {}", e);
@@ -349,18 +304,10 @@ impl FlowTracker {
                 }
             };
 
-            let insert_ipv6conn = match thread_db_conn.prepare(
-                "INSERT
-                INTO ipv6connections (
-                    id,
-                    sid,
-                    anon_cli_ip,
-                    server_ip,
-                    SNI
-                )
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT DO NOTHING;"
-            ) {
+            let insert_ipv6conn = match thread_db_conn.prepare("INSERT
+INTO ipv6connections (id, sid, anon_cli_ip, server_ip, SNI)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT DO NOTHING;") {
                 Ok(stmt) => stmt,
                 Err(e) => {
                     println!("Preparing insert_ipv6conn failed: {}", e);
@@ -368,17 +315,11 @@ impl FlowTracker {
                 }
             };
 
-            let insert_ticket_size = match thread_db_conn.prepare(
-                "INSERT
-                INTO ticket_sizes (
-                    id,
-                    size,
-                    count
-                )
-                VALUES ($1, $2, $3)
-                ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
-                SET count = ticket_sizes.count + $4;"
-            ) {
+            let insert_ticket_size = match thread_db_conn.prepare("INSERT
+INTO ticket_sizes (id, size, count)
+VALUES ($1, $2, $3)
+ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
+  SET count = ticket_sizes.count + $4;") {
                 Ok(stmt) => stmt,
                 Err(e) => {
                     println!("Preparing insert_ticket_size failed: {}", e);
@@ -387,58 +328,40 @@ impl FlowTracker {
             };
 
             for (fp_id, fp) in client_fcache {
-                // insert original signature
-                let mut updated_rows = thread_db_conn.execute(&insert_fingerprint_original, &[
-                    &(fp_id as i64),
+                let updated_rows = thread_db_conn.execute(&insert_fingerprint, &[&(fp_id as i64),
                     &(fp.record_tls_version as i16), &(fp.ch_tls_version as i16),
                     &fp.cipher_suites, &fp.compression_methods, &fp.extensions,
                     &fp.named_groups, &fp.ec_point_fmt, &fp.sig_algs, &fp.alpn,
                     &fp.key_share, &fp.psk_key_exchange_modes, &fp.supported_versions,
-                    &fp.cert_compression_algs, &fp.record_size_limit,
-                ]);
+                    &fp.cert_compression_algs, &fp.record_size_limit,]);
                 if updated_rows.is_err() {
                     println!("Error updating fingerprints: {:?}", updated_rows);
                 }
-
-                // generate normalized extension fingerprint
-                let norm_ext_fp_id = fp.get_fingerprint(true);
-
-                // insert normalized extension list signature
-                updated_rows = thread_db_conn.execute(&insert_fingerprint_norm_ext, &[
-                    &(norm_ext_fp_id as i64),
-                    &(fp.record_tls_version as i16), &(fp.ch_tls_version as i16),
-                    &fp.cipher_suites, &fp.compression_methods, &fp.extensions_norm,
-                    &fp.named_groups, &fp.ec_point_fmt, &fp.sig_algs, &fp.alpn,
-                    &fp.key_share, &fp.psk_key_exchange_modes, &fp.supported_versions,
-                    &fp.cert_compression_algs, &fp.record_size_limit,
-                ]);
-                if updated_rows.is_err() {
-                    println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
-                }
-
-                // insert normalized vs original fingerprint mapping
-                updated_rows = thread_db_conn.execute(&insert_fingerprint_mapping, &[
-                    &(fp_id as i64),
-                    &(norm_ext_fp_id as i64),
-                    &fp.extensions,
-                ]);
-                if updated_rows.is_err() {
-                    println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
-                }
             }
-
-            for (fp_id, regs) in client_ccache {
-                let updated_rows = thread_db_conn.execute(&insert_fingerprint_count_est, &[&(fp_id), &(regs).to_vec()]);
-                if updated_rows.is_err() {
-                    println!("Error updating normalized fp count estimate: {:?}", updated_rows);
-                }
-            } 
 
             for (k, count) in client_mcache {
                 let updated_rows = thread_db_conn.execute(&insert_measurement, &[&(k.1), &(k.0),
                     &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating measurements: {:?}", updated_rows);
+                }
+            }
+
+            for (sid, fp) in server_fcache {
+                let updated_rows = thread_db_conn.execute(&insert_sfingerprint, &[&(sid as i64),
+                    &(fp.record_tls_version as i16), &(fp.sh_tls_version as i16),
+                    &(fp.cipher_suite as i16), &(fp.compression_method as i8), &fp.extensions,
+                    &fp.elliptic_curves, &fp.ec_point_fmt, &fp.alpn]);
+                if updated_rows.is_err() {
+                    println!("Error updating sfingerprints: {:?}", updated_rows);
+                }
+            }
+
+            for (k, count) in server_mcache {
+                let updated_rows = thread_db_conn.execute(&insert_smeasurement, &[&(k.0), &(k.1),
+                    &(count), &(count)]);
+                if updated_rows.is_err() {
+                    println!("Error updating smeasurements: {:?}", updated_rows);
                 }
             }
 

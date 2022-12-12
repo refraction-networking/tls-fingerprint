@@ -10,7 +10,7 @@ use self::crypto::digest::Digest;
 use self::crypto::sha1::Sha1;
 use self::byteorder::{ByteOrder, BigEndian};
 
-use common::{u8_to_u16_be, u8_to_u32_be, vec_u8_to_vec_u16_be, vec_u16_to_vec_u8_be, hash_u32, HelloParseError};
+use common::{u8_to_u16_be, u8_to_u32_be, vec_u8_to_vec_u16_be, hash_u32, HelloParseError};
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -94,7 +94,6 @@ pub struct ClientHelloFingerprint {
     pub compression_methods: Vec<u8>,
 
     pub extensions: Vec<u8>,
-    pub extensions_norm: Vec<u8>,
     pub named_groups: Vec<u8>,
     pub ec_point_fmt: Vec<u8>,
     pub sig_algs: Vec<u8>,
@@ -188,7 +187,6 @@ impl ClientHelloFingerprint {
             cipher_suites: cipher_suites,
             compression_methods: compression_methods,
             extensions: Vec::new(),
-            extensions_norm: Vec::new(),
             named_groups: Vec::new(),
             ec_point_fmt: Vec::new(),
             sig_algs: Vec::new(),
@@ -217,7 +215,6 @@ impl ClientHelloFingerprint {
                 None => return Err(HelloParseError::ExtensionLenExceedBuf),
             };
         }
-        ch.sort_extensions();
         Ok(ch)
     }
 
@@ -302,13 +299,7 @@ impl ClientHelloFingerprint {
         Ok(())
     }
 
-    pub fn sort_extensions(&mut self) {
-        let mut extensions = vec_u8_to_vec_u16_be(&self.extensions);
-        extensions.sort();
-        self.extensions_norm = vec_u16_to_vec_u8_be(&extensions);
-    }
-
-    pub fn get_fingerprint(&self, normalized_ext: bool) -> u64 {
+    pub fn get_fingerprint(&self) -> u64 {
         //let mut s = DefaultHasher::new(); // This is SipHasher13, nobody uses this...
         //let mut s = SipHasher24::new_with_keys(0, 0);
         // Fuck Rust's deprecated "holier than thou" bullshit attitude
@@ -325,13 +316,8 @@ impl ClientHelloFingerprint {
         hash_u32(&mut hasher, self.compression_methods.len() as u32);
         hasher.input(&self.compression_methods);
 
-        if normalized_ext {
-            hash_u32(&mut hasher, self.extensions_norm.len() as u32);
-            hasher.input(&self.extensions_norm);
-        } else {
-            hash_u32(&mut hasher, self.extensions.len() as u32);
-            hasher.input(&self.extensions);
-        }
+        hash_u32(&mut hasher, self.extensions.len() as u32);
+        hasher.input(&self.extensions);
 
         hash_u32(&mut hasher, self.named_groups.len() as u32);
         hasher.input(&self.named_groups);
@@ -423,6 +409,177 @@ fn parse_key_share(arr: &[u8]) -> Result<Vec<u8>, HelloParseError> {
     Ok(res)
 }
 
+#[derive(Debug, PartialEq)]
+pub struct ServerHelloFingerprint {
+    pub record_tls_version: TlsVersion,
+    pub sh_tls_version: TlsVersion,
+    pub cipher_suite: u16,
+    pub compression_method: u8,
+
+    pub extensions: Vec<u8>,
+    pub elliptic_curves: Vec<u8>,
+    pub ec_point_fmt: Vec<u8>,
+    pub alpn: Vec<u8>,
+}
+
+
+pub type ServerHelloParseResult = Result<ServerHelloFingerprint, HelloParseError>;
+
+impl ServerHelloFingerprint {
+    pub fn from_try(a: &[u8]) -> ServerHelloParseResult {
+        if a.len() < 44 {
+            return Err(HelloParseError::ShortBuffer);
+        }
+
+        let record_type = a[0];
+        if TlsRecordType::from_u8(record_type) != Some(TlsRecordType::Handshake) {
+            return Err(HelloParseError::NotAHandshake);
+        }
+
+        let record_tls_version = match TlsVersion::from_u16(u8_to_u16_be(a[1], a[2])) {
+            Some(tls_version) => tls_version,
+            None => return Err(HelloParseError::UnknownRecordTLSVersion),
+        };
+
+        let record_length = u8_to_u16_be(a[3], a[4]);
+        if usize::from_u16(record_length).unwrap() > a.len() - 5 {
+            return Err(HelloParseError::ShortOuterRecord);
+        }
+
+        if TlsHandshakeType::from_u8(a[5]) != Some(TlsHandshakeType::ServerHello) {
+            return Err(HelloParseError::NotAServerHello);
+        }
+
+        let ch_length = u8_to_u32_be(0, a[6], a[7], a[8]);
+        if ch_length != record_length as u32 - 4 {
+            return Err(HelloParseError::InnerOuterRecordLenContradict);
+        }
+
+        let sh_tls_version = match TlsVersion::from_u16(u8_to_u16_be(a[9], a[10])) {
+            Some(tls_version) => tls_version,
+            None => return Err(HelloParseError::UnknownChTLSVersion),
+        };
+
+        // 32 bytes of client random
+
+        let mut offset: usize = 43;
+
+        let session_id_len = a[offset] as usize;
+        offset += session_id_len + 1;
+        if offset + 2 > a.len() {
+            return Err(HelloParseError::SessionIDLenExceedBuf);
+        }
+
+        if offset + 5 > a.len() {
+            return Err(HelloParseError::ShortBuffer);
+        }
+
+        let cipher_suite = u8_to_u16_be(a[offset], a[offset + 1]);
+        offset += 2;
+
+        let compression_method = a[offset];
+        offset += 1;
+
+        let extensions_len = u8_to_u16_be(a[offset], a[offset + 1]) as usize;
+        offset += 2;
+        if offset + extensions_len > a.len() {
+            return Err(HelloParseError::ExtensionsLenExceedBuf);
+        }
+
+        let mut sh = ServerHelloFingerprint {
+            record_tls_version: record_tls_version,
+            sh_tls_version: sh_tls_version,
+            cipher_suite: cipher_suite,
+            compression_method: compression_method,
+            extensions: Vec::new(),
+            elliptic_curves: Vec::new(),
+            ec_point_fmt: Vec::new(),
+            alpn: Vec::new(),
+        };
+
+        let sh_end = offset + extensions_len;
+        while offset < sh_end {
+            if offset > sh_end - 4 {
+                return Err(HelloParseError::ShortExtensionHeader);
+            }
+
+            let ext_len = u8_to_u16_be(a[offset + 2], a[offset + 3]) as usize;
+            if offset + ext_len > sh_end {
+                return Err(HelloParseError::ExtensionLenExceedBuf);
+            }
+            sh.process_extension(&a[offset..offset + 2], &a[offset + 4..offset + 4 + ext_len]);
+
+            offset = match (offset + 4).checked_add(ext_len) {
+                Some(i) => i,
+                None => return Err(HelloParseError::ExtensionLenExceedBuf),
+            };
+        }
+        Ok(sh)
+    }
+
+    // NOT UNGREASED
+    fn process_extension(&mut self, ext_id_u8: &[u8], ext_data: &[u8]) {
+        let ext_id = u8_to_u16_be(ext_id_u8[0], ext_id_u8[1]);
+        match TlsExtension::from_u16(ext_id) {
+            // we copy whole ext_data, including all the redundant lengths
+            Some(TlsExtension::SupportedCurves) => {
+                self.elliptic_curves = ext_data.to_vec();
+            }
+            Some(TlsExtension::SupportedPoints) => {
+                self.ec_point_fmt = ext_data.to_vec();
+            }
+            Some(TlsExtension::ALPN) => {
+                self.alpn = ext_data.to_vec();
+            }
+            _ => {}
+        };
+
+        self.extensions.append(&mut ungrease_u8(ext_id_u8));
+    }
+
+    pub fn get_fingerprint(&self) -> u64 {
+        let mut hasher = Sha1::new();
+
+        let versions = (self.record_tls_version as u32) << 16 | (self.sh_tls_version as u32);
+        hash_u32(&mut hasher, versions);
+
+        let suite_and_compr = (self.cipher_suite as u32) << 16 | (self.compression_method as u32);
+        // 8 bytes are left empty, that's fine
+        hash_u32(&mut hasher, suite_and_compr as u32);
+
+        hash_u32(&mut hasher, self.extensions.len() as u32);
+        hasher.input(&self.extensions);
+
+        hash_u32(&mut hasher, self.elliptic_curves.len() as u32);
+        hasher.input(&self.elliptic_curves);
+
+        hash_u32(&mut hasher, self.ec_point_fmt.len() as u32);
+        hasher.input(&self.ec_point_fmt);
+
+        hash_u32(&mut hasher, self.alpn.len() as u32);
+        hasher.input(&self.alpn);
+
+        let mut result = [0; 20];
+        hasher.result(&mut result);
+        BigEndian::read_u64(&result[0..8])
+    }
+}
+
+impl fmt::Display for ServerHelloFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "record: {:?} sh: {:?} cipher: {:X} compression: {:X} \
+        extensions: {:X} curves: {:X} ec_fmt: {:X} alpn: {:X}",
+               self.record_tls_version, self.sh_tls_version,
+               &self.cipher_suite,
+               &self.compression_method,
+               vec_u8_to_vec_u16_be(&self.extensions).as_slice().as_hex(),
+               vec_u8_to_vec_u16_be(&self.elliptic_curves).as_slice().as_hex(),
+               self.ec_point_fmt.as_slice().as_hex(),
+               self.alpn.as_slice().as_hex(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tls_parser::{ClientHelloFingerprint, TlsVersion};
@@ -445,7 +602,6 @@ mod tests {
             cipher_suites: Vec::new(),
             compression_methods: Vec::new(),
             extensions: Vec::new(),
-            extensions_norm: Vec::new(),
             named_groups: Vec::new(),
             ec_point_fmt: Vec::new(),
             sig_algs: Vec::new(),
@@ -458,7 +614,7 @@ mod tests {
             cert_compression_algs: Vec::new(),
             record_size_limit: Vec::new(),
         };
-        assert_eq!(ch.get_fingerprint(false), 6116981759083077708);
+        assert_eq!(ch.get_fingerprint(), 6116981759083077708);
     }
 
 
@@ -476,7 +632,6 @@ mod tests {
                              0x00, 0x23, 0x00, 0x0d, 0x00, 0x05, 0x00, 0x12,
                              0x00, 0x10, 0x75, 0x50, 0x00, 0x0b, 0x00, 0x0a,
                              0x0a, 0x0a],
-            extensions_norm: vec! [],
             named_groups: vec![0x00, 0x08, 0x0a, 0x0a, 0x00, 0x1d, 0x00, 0x17,
                                0x00, 0x18],
             ec_point_fmt: vec![0x01, 0x00],
@@ -497,7 +652,7 @@ mod tests {
             cert_compression_algs: Vec::new(),
             record_size_limit: Vec::new(),
         };
-        assert_eq!(ch.get_fingerprint(false), 2850294275305369904);
+        assert_eq!(ch.get_fingerprint(), 2850294275305369904);
     }
 
     #[test]
@@ -514,7 +669,6 @@ mod tests {
             compression_methods: vec![0],
             extensions: vec![0x00, 0x00, 0x00, 0x05, 0x00, 0x0a, 0x00, 0x0b,
                              0x00, 0x0d, 0x00, 0x17, 0xff, 0x01],
-            extensions_norm: vec! [],
             named_groups: vec![0x00, 0x04, 0x00, 0x17, 0x00, 0x18],
             ec_point_fmt: vec![0x01, 0x00],
             sig_algs: vec![0x00, 0x0e, 0x04, 0x01, 0x05, 0x01, 0x02, 0x01,
@@ -550,7 +704,6 @@ mod tests {
                              0x00, 0x23, 0x00, 0x0d, 0x00, 0x05, 0x00, 0x12,
                              0x00, 0x10, 0x75, 0x50, 0x00, 0x0b, 0x00, 0x0a,
                              0x0a, 0x0a],
-            extensions_norm: vec! [],
             named_groups: vec![0x00, 0x08, 0x0a, 0x0a, 0x00, 0x1d, 0x00, 0x17,
                                0x00, 0x18],
             ec_point_fmt: vec![0x01, 0x00],
