@@ -6,6 +6,13 @@ use common::{Flow, ConnectionIPv6, ConnectionIPv4, u8_to_u16_be, u8_to_u32_be, u
 use std::net::IpAddr;
 use tls_parser::{ClientHelloFingerprint};
 
+
+pub const MEASUREMENT_CACHE_FLUSH: i64 = 60; // every min
+pub const CONNECTION_SID_WAIT_TIMEOUT: i64 = 10; // 10 secs
+const HLL_REGS: usize = 128; // Number of registers for HLL struct
+const HLL_BITS: usize = 7; // log2(HLL_REGS)
+const MASK: u8 = (1<<(8-HLL_BITS)) - 1;
+const IDX_MASK: u8 = 0xff ^ MASK;
 // to ease load on db, cache queries
 pub struct MeasurementCache {
     pub last_flush: time::Tm,
@@ -14,6 +21,10 @@ pub struct MeasurementCache {
     // (cid, timestamp): count
     fingerprints_new: HashMap<i64, ClientHelloFingerprint>,
     fingerprints_flushed: HashSet<i64>,
+
+    // for normalized fingerprint estimation
+    norm_fp_counts: HashMap<i64, [u8; HLL_REGS]>,
+    dirty_norm_fp_counts: HashMap<i64, [u8; HLL_REGS]>,
     // for connections
 
     ticket_sizes: HashMap<(i64, i16), i64>, // (ClientHelloID, ticket_size) -> count
@@ -23,9 +34,6 @@ pub struct MeasurementCache {
     ipv6_connections: HashMap<Flow, ConnectionIPv6>,
 }
 
-pub const MEASUREMENT_CACHE_FLUSH: i64 = 60; // every min
-pub const CONNECTION_SID_WAIT_TIMEOUT: i64 = 10; // 10 secs
-
 impl MeasurementCache {
     pub fn new() -> MeasurementCache {
         MeasurementCache {
@@ -33,6 +41,9 @@ impl MeasurementCache {
             measurements: HashMap::new(),
             fingerprints_flushed: HashSet::new(),
             fingerprints_new: HashMap::new(),
+
+            norm_fp_counts: HashMap::new(),
+            dirty_norm_fp_counts: HashMap::new(),
 
             ticket_sizes: HashMap::new(),
 
@@ -48,10 +59,22 @@ impl MeasurementCache {
         *counter += 1;
     }
 
-    pub fn add_fingerprint(&mut self, fp_id: i64, fp: ClientHelloFingerprint) {
+    pub fn add_fingerprint(&mut self, fp_id: i64, fp: ClientHelloFingerprint, norm_fp_id: i64) {
         if !self.fingerprints_flushed.contains(&fp_id) {
             self.fingerprints_new.insert(fp_id, fp);
         }
+        self.update_norm_count(norm_fp_id, fp_id);
+    }
+
+    fn update_norm_count(&mut self, norm_fp_id: i64, h: i64) {
+        let estimate = self.norm_fp_counts.entry(norm_fp_id).or_insert([0; HLL_REGS]); // Get existing estimate or insert new one
+        let idx = ((((h>>56) as u8) & IDX_MASK) >> (8-HLL_BITS)) as usize; //Get first byte of 8 byte fp AND with IDX_MASK
+        let masked_h = h & (((MASK as u64) << 56) as i64); //MASK the position bits in nor
+        let pos = (masked_h.leading_zeros() - (HLL_BITS as u32) + 1) as u8; // Remove initial positional bytes, increment by one for leading zeros count
+        if pos > estimate[idx] {
+            estimate[idx] = pos;
+        }
+        self.dirty_norm_fp_counts.insert(norm_fp_id, *estimate);
     }
 
     pub fn add_ticket_size(&mut self, cid: i64, ticket_size: i16) {
@@ -124,6 +147,10 @@ impl MeasurementCache {
             self.fingerprints_flushed.insert(*fp_id);
         }
         mem::replace(&mut self.fingerprints_new, HashMap::new())
+    }
+
+    pub fn flush_dirty_norm_fps(&mut self) -> HashMap<i64, [u8; HLL_REGS]> {
+        mem::replace(&mut self.dirty_norm_fp_counts, HashMap::new())
     }
 
     fn get_ipv4connections_to_flush(&self) -> HashSet<Flow> {

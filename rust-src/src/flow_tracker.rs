@@ -165,6 +165,7 @@ impl FlowTracker {
                 Ok(fp) => {
                     self.stats.fingerprints_seen += 1;
                     let fp_id = fp.get_fingerprint(false);
+                    let norm_fp_id = fp.get_fingerprint(true);
 
                     self.begin_tracking_server_flow(&flow.reversed_clone(), fp_id as i64);
 
@@ -188,7 +189,7 @@ impl FlowTracker {
                         // insert current fingerprint and measurement
                         self.cache.add_connection(&flow, fp_id as i64,
                                                   fp.sni.to_vec(), curr_time.to_timespec().sec);
-                        self.cache.add_fingerprint(fp_id as i64, fp);
+                        self.cache.add_fingerprint(fp_id as i64, fp, norm_fp_id as i64);
 
                         curr_time.tm_nsec = 0; // privacy
                         curr_time.tm_sec = 0;
@@ -208,6 +209,7 @@ impl FlowTracker {
     fn flush_to_db(&mut self) {
         let client_mcache = self.cache.flush_measurements();
         let client_fcache = self.cache.flush_fingerprints();
+        let client_ccache = self.cache.flush_dirty_norm_fps();
         let c4cache = self.cache.flush_ipv4connections();
         let c6cache = self.cache.flush_ipv6connections();
         let ticket_sizes = self.cache.flush_ticket_sizes();
@@ -271,6 +273,23 @@ impl FlowTracker {
                 Ok(stmt) => stmt,
                 Err(e) => {
                     println!("Preparing insert_fingerprint_norm_ext failed: {}", e);
+                    return;
+                }
+            };
+
+            let insert_fingerprint_count_est = match thread_db_conn.prepare(
+                "INSERT
+                INTO fingerprint_count_est (
+                    norm_fp_id,
+                    regs
+                )
+                VALUES ($1, $2)
+                ON CONFLICT (norm_fp_id) DO UPDATE
+                SET regs = greatest_bytea(fingerprint_count_est.regs, $1);"
+            ) {
+                Ok(stmt) => stmt,
+                Err(e) => {
+                    println!("Preparing insert_fingerprint_count_est failed: {}", e);
                     return;
                 }
             };
@@ -407,6 +426,13 @@ impl FlowTracker {
                     println!("Error updating normalized extension fingerprints: {:?}", updated_rows);
                 }
             }
+
+            for (fp_id, regs) in client_ccache {
+                let updated_rows = thread_db_conn.execute(&insert_fingerprint_count_est, &[&(fp_id), &(regs).to_vec()]);
+                if updated_rows.is_err() {
+                    println!("Error updating normalized fp count estimate: {:?}", updated_rows);
+                }
+            } 
 
             for (k, count) in client_mcache {
                 let updated_rows = thread_db_conn.execute(&insert_measurement, &[&(k.1), &(k.0),
