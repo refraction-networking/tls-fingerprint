@@ -11,8 +11,9 @@ pub const MEASUREMENT_CACHE_FLUSH: i64 = 60; // every min
 pub const CONNECTION_SID_WAIT_TIMEOUT: i64 = 10; // 10 secs
 const HLL_REGS: usize = 128; // Number of registers for HLL struct
 const HLL_BITS: usize = 7; // log2(HLL_REGS)
-const MASK: u8 = (1<<(8-HLL_BITS)) - 1;
-const IDX_MASK: u8 = 0xff ^ MASK;
+const MASK: u64 = (1<<(8-HLL_BITS)) - 1;
+const IDX_MASK: u64 = 0xff ^ MASK;
+const H_MASK: u64 = !(IDX_MASK << 56);
 // to ease load on db, cache queries
 pub struct MeasurementCache {
     pub last_flush: time::Tm,
@@ -68,8 +69,8 @@ impl MeasurementCache {
 
     fn update_norm_count(&mut self, norm_fp_id: i64, h: i64) {
         let estimate = self.norm_fp_counts.entry(norm_fp_id).or_insert([0; HLL_REGS]); // Get existing estimate or insert new one
-        let idx = ((((h>>56) as u8) & IDX_MASK) >> (8-HLL_BITS)) as usize; //Get first byte of 8 byte fp AND with IDX_MASK
-        let masked_h = h & (((MASK as u64) << 56) as i64); //MASK the position bits in nor
+        let idx = ((((h as u64)>>56) & IDX_MASK) >> (8-HLL_BITS)) as usize; //Get first byte of 8 byte fp AND with IDX_MASK
+        let masked_h = h & H_MASK as i64; //MASK the position bits in nor
         let pos = (masked_h.leading_zeros() - (HLL_BITS as u32) + 1) as u8; // Remove initial positional bytes, increment by one for leading zeros count
         if pos > estimate[idx] {
             estimate[idx] = pos;
