@@ -22,11 +22,14 @@ pub enum HelloParseError {
     ShortExtensionHeader,
     ExtensionLenExceedBuf,
 
+    NotAServerHello,
+
     KeyShareExtShort,
     KeyShareExtLong,
     KeyShareExtLenMisparse,
     PskKeyExchangeModesExtShort,
     PskKeyExchangeModesExtLenMisparse,
+    SupportedVersionsExtShort,
     SupportedVersionsExtLenMisparse,
 }
 

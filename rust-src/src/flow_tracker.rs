@@ -285,7 +285,7 @@ impl FlowTracker {
                 )
                 VALUES ($1, $2)
                 ON CONFLICT (norm_fp_id) DO UPDATE
-                SET regs = greatest_bytea(fingerprint_count_est.regs, $1);"
+                SET regs = greatest_bytea(fingerprint_count_est.regs, $2);"
             ) {
                 Ok(stmt) => stmt,
                 Err(e) => {
