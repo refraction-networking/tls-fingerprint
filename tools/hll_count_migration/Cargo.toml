@@ -1,5 +1,5 @@
 [package]
-name = "hyperloglog_insert"
+name = "hll_count_migration"
 version = "0.1.0"
 edition = "2021"
 

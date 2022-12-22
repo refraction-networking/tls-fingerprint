@@ -194,7 +194,8 @@ impl FlowTracker {
                         curr_time.tm_nsec = 0; // privacy
                         curr_time.tm_sec = 0;
                         curr_time.tm_min = 0;
-                        self.cache.add_measurement(fp_id as i64, curr_time.to_timespec().sec as i32);
+                        self.cache.add_measurement(fp_id as i64, curr_time.to_timespec().sec as i32, false);
+                        self.cache.add_measurement(norm_fp_id as i64, curr_time.to_timespec().sec as i32, true);
                     }
                 }
                 Err(err) => {
@@ -207,7 +208,8 @@ impl FlowTracker {
     }
 
     fn flush_to_db(&mut self) {
-        let client_mcache = self.cache.flush_measurements();
+        let client_mcache = self.cache.flush_measurements(false);
+        let client_mcache_norm = self.cache.flush_measurements(true);
         let client_fcache = self.cache.flush_fingerprints();
         let client_ccache = self.cache.flush_dirty_norm_fps();
         let c4cache = self.cache.flush_ipv4connections();
@@ -330,6 +332,24 @@ impl FlowTracker {
                 }
             };
 
+            let insert_measurement_norm_ext = match thread_db_conn.prepare(
+                "INSERT
+                INTO measurements_norm_ext (
+                    unixtime,
+                    id,
+                    count
+                )
+                VALUES ($1, $2, $3)
+                ON CONFLICT ON CONSTRAINT measurements_norm_ext_pkey DO UPDATE
+                SET count = measurements_norm_ext.count + $4;"
+            ) {
+                Ok(stmt) => stmt,
+                Err(e) => {
+                    println!("Preparing insert_measurement_norm_ext failed: {}", e);
+                    return;
+                }
+            };
+
             let insert_ipv4conn = match thread_db_conn.prepare(
                 "INSERT
                 INTO ipv4connections (
@@ -439,6 +459,14 @@ impl FlowTracker {
                     &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating measurements: {:?}", updated_rows);
+                }
+            }
+
+            for (k, count) in client_mcache_norm {
+                let updated_rows = thread_db_conn.execute(&insert_measurement_norm_ext, &[&(k.1), &(k.0),
+                    &(count), &(count)]);
+                if updated_rows.is_err() {
+                    println!("Error updating measurements_norm_ext: {:?}", updated_rows);
                 }
             }
 

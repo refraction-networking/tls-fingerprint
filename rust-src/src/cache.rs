@@ -19,6 +19,7 @@ pub struct MeasurementCache {
     pub last_flush: time::Tm,
     // for ClientHello
     measurements: HashMap<(i64, i32), i32>,
+    measurements_norm_ext: HashMap<(i64, i32), i32>,
     // (cid, timestamp): count
     fingerprints_new: HashMap<i64, ClientHelloFingerprint>,
     fingerprints_flushed: HashSet<i64>,
@@ -40,6 +41,7 @@ impl MeasurementCache {
         MeasurementCache {
             last_flush: time::now(),
             measurements: HashMap::new(),
+            measurements_norm_ext: HashMap::new(),
             fingerprints_flushed: HashSet::new(),
             fingerprints_new: HashMap::new(),
 
@@ -54,9 +56,14 @@ impl MeasurementCache {
         }
     }
 
-    pub fn add_measurement(&mut self, fp_id: i64, ts: i32) {
+    pub fn add_measurement(&mut self, fp_id: i64, ts: i32, norm_ext: bool) {
         let key = (fp_id, ts);
-        let counter = self.measurements.entry(key).or_insert(0);
+        let counter;
+        if norm_ext {
+            counter = self.measurements_norm_ext.entry(key).or_insert(0);
+        } else {
+            counter = self.measurements.entry(key).or_insert(0);
+        }
         *counter += 1;
     }
 
@@ -136,9 +143,13 @@ impl MeasurementCache {
     }
 
     // returns cached HashMap of measurements, empties it in object
-    pub fn flush_measurements(&mut self) -> HashMap<(i64, i32), i32> {
+    pub fn flush_measurements(&mut self, norm_ext: bool) -> HashMap<(i64, i32), i32> {
         self.last_flush = time::now();
-        mem::replace(&mut self.measurements, HashMap::new())
+        if norm_ext {
+            mem::replace(&mut self.measurements_norm_ext, HashMap::new())
+        } else {
+            mem::replace(&mut self.measurements, HashMap::new())
+        }
     }
 
     // returns cached HashMap of fingerprints, empties it in object

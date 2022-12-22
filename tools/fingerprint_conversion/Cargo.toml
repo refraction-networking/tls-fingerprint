@@ -1,5 +1,5 @@
 [package]
-name = "conversion"
+name = "fingerprint_conversion"
 version = "0.1.0"
 edition = "2021"
 
