@@ -217,6 +217,10 @@ impl FlowTracker {
         let ticket_sizes = self.cache.flush_ticket_sizes();
 
         let dsn = self.dsn.clone().unwrap();
+
+        // Update the HLL count map
+        self.cache.update_raw_fingerprint_count(dsn.clone());
+
         thread::spawn(move || {
             let inserter_thread_start = time::now();
             let mut thread_db_conn = Client::connect(&dsn, NoTls).unwrap();

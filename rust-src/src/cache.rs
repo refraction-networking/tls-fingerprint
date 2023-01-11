@@ -1,8 +1,9 @@
 extern crate time;
 
 use std::collections::{HashSet, HashMap};
-use std::mem;
+use std::{mem, thread};
 use common::{Flow, ConnectionIPv6, ConnectionIPv4, u8_to_u16_be, u8_to_u32_be, u8array_to_u32_be};
+use postgres::{Client, NoTls};
 use std::net::IpAddr;
 use tls_parser::{ClientHelloFingerprint};
 
@@ -34,6 +35,8 @@ pub struct MeasurementCache {
     ipv4_connections_seen: HashSet<(i64, u32)>,
     ipv4_connections: HashMap<Flow, ConnectionIPv4>,
     ipv6_connections: HashMap<Flow, ConnectionIPv6>,
+
+    raw_fingerprint_hll_count: HashSet<i64>,
 }
 
 impl MeasurementCache {
@@ -53,6 +56,8 @@ impl MeasurementCache {
             ipv4_connections_seen: HashSet::new(),
             ipv4_connections: HashMap::new(),
             ipv6_connections: HashMap::new(),
+
+            raw_fingerprint_hll_count: HashSet::new(),
         }
     }
 
@@ -68,7 +73,7 @@ impl MeasurementCache {
     }
 
     pub fn add_fingerprint(&mut self, fp_id: i64, fp: ClientHelloFingerprint, norm_fp_id: i64) {
-        if !self.fingerprints_flushed.contains(&fp_id) {
+        if !self.fingerprints_flushed.contains(&fp_id) && !self.raw_fingerprint_hll_count.contains(&norm_fp_id) {
             self.fingerprints_new.insert(fp_id, fp);
         }
         self.update_norm_count(norm_fp_id, fp_id);
@@ -174,6 +179,59 @@ impl MeasurementCache {
             }
         }
         hs_flows
+    }
+
+    // Updates cache count of times normalized fingerprints have been seen.
+    // Allows for the prevention of logging fingerprints seen more that 100 times.
+    pub fn update_raw_fingerprint_count(&mut self, dsn: String) {
+        let handler = thread::spawn(move || -> Result<HashSet<i64>, postgres::Error> {
+            let mut thread_db_conn = Client::connect(&dsn, NoTls).unwrap();
+
+            let update_fingerprint_count = match thread_db_conn.prepare(
+                "SELECT
+                    a.norm_fp_id
+                FROM (
+                    SELECT
+                        norm_fp_id,
+                        hll_count(regs) AS est_count
+                    FROM
+                        fingerprint_count_est
+                    ) AS a
+                WHERE
+                    a.est_count > 100;"
+            ) {
+                Ok(stmt) => stmt,
+                Err(e) => {
+                    println!("Preparing update_fingerprint_count failed: {}", e);
+                    return Err(e);
+                }
+            };
+
+            match thread_db_conn.query(&update_fingerprint_count, &[]) {
+                Ok(rows) => {
+                    let mut updated_counts = HashSet::new();
+                    for row in rows {
+                        let id: i64 = row.get(0);
+                        updated_counts.insert(id);
+                    }
+                    return Ok(updated_counts);
+                },
+                Err(e) => {
+                    println!("Preparing update_fingerprint_count failed: {}", e);
+                    return Err(e);
+                }
+            };
+        });
+
+        match handler.join().unwrap() {
+            Ok(new_counts) => {
+                self.raw_fingerprint_hll_count.clone_from(&new_counts);
+                println!("Successfully updated HLL counts.");
+            },
+            Err(e) => {
+                println!("Error unwrapping new counts: {}", e);
+            },
+        }
     }
 
     // returns cached HashMap of ipv4 connections, empties it in object
