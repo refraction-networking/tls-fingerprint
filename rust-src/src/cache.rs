@@ -61,15 +61,15 @@ impl MeasurementCache {
         }
     }
 
-    pub fn add_measurement(&mut self, fp_id: i64, ts: i32, norm_ext: bool) {
-        let key = (fp_id, ts);
-        let counter;
-        if norm_ext {
-            counter = self.measurements_norm_ext.entry(key).or_insert(0);
-        } else {
-            counter = self.measurements.entry(key).or_insert(0);
+    pub fn add_measurement(&mut self, fp_id: i64, norm_fp_id: i64, ts: i32) {
+        if !self.raw_fingerprint_hll_count.contains(&norm_fp_id) {
+            let raw_key = (fp_id, ts);
+            let raw_counter = self.measurements.entry(raw_key).or_insert(0);
+            *raw_counter += 1;
         }
-        *counter += 1;
+        let norm_key = (fp_id, ts);
+        let norm_counter = self.measurements_norm_ext.entry(norm_key).or_insert(0);
+        *norm_counter += 1;
     }
 
     pub fn add_fingerprint(&mut self, fp_id: i64, fp: ClientHelloFingerprint, norm_fp_id: i64) {

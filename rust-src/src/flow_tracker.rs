@@ -194,8 +194,7 @@ impl FlowTracker {
                         curr_time.tm_nsec = 0; // privacy
                         curr_time.tm_sec = 0;
                         curr_time.tm_min = 0;
-                        self.cache.add_measurement(fp_id as i64, curr_time.to_timespec().sec as i32, false);
-                        self.cache.add_measurement(norm_fp_id as i64, curr_time.to_timespec().sec as i32, true);
+                        self.cache.add_measurement(fp_id as i64, norm_fp_id as i64, curr_time.to_timespec().sec as i32);
                     }
                 }
                 Err(err) => {
