@@ -67,7 +67,7 @@ impl MeasurementCache {
             let raw_counter = self.measurements.entry(raw_key).or_insert(0);
             *raw_counter += 1;
         }
-        let norm_key = (fp_id, ts);
+        let norm_key = (norm_fp_id, ts);
         let norm_counter = self.measurements_norm_ext.entry(norm_key).or_insert(0);
         *norm_counter += 1;
     }
