@@ -185,7 +185,7 @@ impl MeasurementCache {
     // Allows for the prevention of logging fingerprints seen more that 100 times.
     pub fn update_raw_fingerprint_count(&mut self, dsn: String) {
         let handler = thread::spawn(move || -> Result<HashSet<i64>, postgres::Error> {
-            let mut thread_db_conn = Client::connect(&dsn, NoTls).unwrap();
+            let mut thread_db_conn = Client::connect(&dsn, NoTls)?;
 
             let update_fingerprint_count = match thread_db_conn.prepare(
                 "SELECT
@@ -223,14 +223,17 @@ impl MeasurementCache {
             };
         });
 
-        match handler.join().unwrap() {
-            Ok(new_counts) => {
-                self.raw_fingerprint_hll_count.clone_from(&new_counts);
-                println!("Successfully updated HLL counts.");
+        match handler.join() {
+            Ok(inner) =>  match inner {
+                Ok(new_counts) => {
+                    self.raw_fingerprint_hll_count.clone_from(&new_counts);
+                    println!("Successfully updated HLL counts.");
+                },
+                Err(e) => {
+                    println!("Error unwrapping new counts: {}", e);
+                },
             },
-            Err(e) => {
-                println!("Error unwrapping new counts: {}", e);
-            },
+            Err(_) => println!("Error unwrapping thread"),
         }
     }
 
