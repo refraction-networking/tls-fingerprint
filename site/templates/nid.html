@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}: id N/{{ id }}{% endblock %}
+
+{% block content %}
+   <main role="main" class="container">
+      <div class="col-12">
+        <h1><a href="/id/N/{{ id }}">N/{{ id }}</a><sup><a href="/norm_fp">What's N?</a></sup></h1>
+        <table class="table">
+          <tbody>
+            <tr><td><b>Seen</b> <span class="right-inline">(all time)<br/>
+                                      (past week)</td>
+                    <td>{{ seen }} times ({{'%0.2f'| format(frac|float)}}%)<br/>
+                        {{ seen_wk }} times ({{'%0.2f'| format(frac_wk|float)}}%)</td></tr>
+            <tr><td><b>Rank</b> <span class="right-inline">(all time)<br/>
+                                (past week)</td>
+                    <td>{{ rank }} / {{ unique }}<br/>
+                        {{ rank_wk }} / {{ unique_wk }}</td></tr>
+
+            <tr><td><b>TLS Version</b></td><td>{{ tls_ver }}</td></tr>
+
+            <tr><td><b>Handshake Version</b></td><td>{{ ch_ver }}</td></tr>
+
+            <tr><td><b>Cipher Suites</b><br/>
+                    <a class="small" href="/match/cipher/{{ ciphers_str }}">exact match</a></td>
+                <td>{% for cs in ciphers %}<a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
+                <br/>{% endfor %}</td></tr>
+            <tr><td><b>Compression Methods</b></td><td>{% for c in comps %}{{ c.s }}<br/>{% endfor %}</td></tr>
+            <tr><td><b>Extensions</b><br/>
+                    <a class="small" href="/match/extension/{{ ext_str }}">exact match</a></td>
+                <td>{% for e in extensions %}<a href="/find/extension/{{ '%04x' % e.n }}">{{ e.s }}</a>
+                <br/>{% endfor %}</td></tr>
+            <tr><td><b>Supported Groups</b><br/>
+                    <a class="small" href="/match/group/{{ curves_str }}">exact match</a></td>
+                <td>{% for c in curves %}<a href="/find/group/{{ '%04x'%c.n }}">{{ c.s }}</a>
+                <br/>{% endfor %}</td></tr>
+            <tr><td><b>Signature Algorithms</b><br/>
+                    <a class="small" href="/match/sigalg/{{ sigalgs_str }}">exact match</a></td>
+                <td>{% for sa in sig_algs %}{{ sa }}<br/>{% endfor %}</td></tr>
+            <tr><td><b>EC Point Formats</b></td><td>{% for c in pt_fmts %}{{ c.s }}<br/>{% endfor %}</td></tr>
+            <tr><td><b>ALPN</b></td><td>{% for a in alpns %}{{ a }}<br/>{% endfor %}</td></tr>
+            <tr><td><b>Key Share</b></td>
+                <td>{% for k in key_share %}{{ k.s }} - {{ k.key_len}}-byte key
+                <br/>{% endfor %}</td></tr>
+
+            <tr><td><b>PSK Key Exchange Modes</b></td>
+                <td>{% for k in psk_key_exchange_modes %}{{ k.s }}
+                <br/>{% endfor %}</td></tr>
+
+            <tr><td><b>Supported Versions</b>
+                    {% if version_str|length > 0 %}<br/>
+                    <a class="small" href="/match/supported_version/{{ version_str }}">exact match</a>{% endif %}</td>
+                    <td>{% for v in supported_versions %}<a href="/find/supported_version/{{ '%04x'%v.n }}">{{ v.s }}</a>
+                <br/>{% endfor %}</td></tr>
+
+
+            <tr><td><b>Certificate Compression Algorithms</b></td>
+                <td>{% for k in cert_compression_algs %}{{ k.s }}
+                <br/>{% endfor %}</td></tr>
+
+            <tr><td><b>Record Size Limit</b></td><td>{% if record_size_limit is not none %}{{ record_size_limit }}{% endif %}</td></tr>
+
+            <tr><td>nid</td><td>{{ nid }}</td></tr>
+            {% if cluster_seen is not none %}
+            <tr><td>Cluster</td>
+                    <td><a href="/cluster/{{ id }}">Cluster #{{ cluster_rank }}</a><br/>
+                            <b>{{ cluster_fps }}</b> fingerprints, comprising <b>{{ '%.1f' % cluster_pct }}%</b> of connections</td></tr>
+            {% endif %}
+            <tr><td>Related</td>
+                <td>{% for fp in related %}
+                        <a href="/id/{{ fp.id }}">{{ fp.id }}</a> (<a href="/compare/{{ id }}/{{ fp.id }}">compare</a>) Seen {{ fp.seen }} times ({{ '%0.2f'|format(fp.frac|float) }}%) <!-- {{ fp.lev }} -->
+    {% if fp.labels|length > 0 %}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;({{ fp.labels[0].name }}){% endif %}
+    <br/>
+{% endfor %}</td></tr>
+            <tr><td>Labels</td>
+                <td>{% for l in labels %}
+                    <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
+                {% endfor %}</td></tr>
+         <tr><td><a href="https://github.com/refraction-networking/utls">uTLS</a> generated code</td>
+           <td width="80%">
+  <a class="btn btn-primary" data-toggle="collapse" href="#utlsCode" role="button" aria-expanded="false" aria-controls="utlsCode">Click to expand</a>
+<div class="collapse" id="utlsCode"><div class="card card-body">
+<pre><code class="go">{{ utls_code_prefix }}
+{{ utls_code_body|safe }}
+{{ utls_code_suffix }}</code></pre></div></div>
+           </td></tr>
+          </tbody>
+        </table>
+        <h3>Times seen (per hour)</h3>
+        <div class="graph" id="graph">
+        <canvas ylabel="Connections / hour" yformat=".2s" width="960" height="500"></canvas>
+        <script src="/idgraph.js/measurements/{{ id }}/graph"></script>
+        </div>
+
+        <h3>Percent seen (24 hour averaged)</h3>
+        <div class="graph" id="norm">
+        <canvas width="960" height="500"></canvas>
+        <script src="/idgraph.js/data/norm/{{ id }}/norm?fill=false"></script>
+        </div>
+
+        <table class="table">
+         <tbody>
+          <tr><td>User Agents</td>
+            <td>{% for ua in useragents %}{{ua}}<br/>{% endfor %}</td></tr>
+         </tbody>
+        </table>
+
+      </div>
+    </main>
+
+<!-- {% for t in times %}
+{{ t }}
+{% endfor %}
+ -->
+{% endblock %}

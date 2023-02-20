@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %} - Normalized Fingerprints{% endblock %}
+
+{% block content %}
+<main role="main" class="container">
+
+    <h1>Normalized Fingerprints</h1>
+    <p>
+        It is observed that Google Chrome has been shuffling their list of TLS Extensions for every ClientHello. 
+        As a result, each new ClientHello created has a "unique" order of TLS Extensions and leads to a "unique" fingerprint, since our fingerprint calculation algorithm takes the order of extensions into account for good granularity. 
+        Such shuffling feature has greatly reduced traceability for each individual fingerprints since the probability of the same order to be observed again is mathematically low.
+    <br>
+        For example, Google Chrome 109 has 18 TLS extensions, and 15 of them doesn't have a fixed position in the list. Assuming the order is truly uniformly randomized, the chance of the same fingerprint to be seen again is 1/(15!)=7.6471637e-13.
+    </p>
+
+    <p>
+        As an effort to keep this service working, we introduced fingerprints extension normalization, which sorts the list of extensions in a ClientHello and calculate the fingerprint based on the same ClientHello message with the list of extensions to be replaced with the sorted version. 
+        All normalized fingerprints start with an "N/", which stands for "Normalized". The order of the extensions might not be observed (yet) in the real world. 
+    </p>
+</main>
+{% endblock %}

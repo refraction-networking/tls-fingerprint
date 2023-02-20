@@ -21,7 +21,6 @@ def ungrease_one(a):
 def ungrease(x):
     return map(ungrease_one, x)
 
-
 # Could use struct.parse, but meh. want arbitrary length arrays of base-256 data
 def aint(arr):
     s = 0
@@ -30,6 +29,12 @@ def aint(arr):
         s += ord(a)
     return s
 
+# convert lists of u16 to list of u8s
+def list_u16_to_u8(l):
+    return [u8 for pair in [[u16 >> 8, u16 & 0xff] for u16 in l] for u8 in pair]
+
+def list_u8_to_u16(l):
+    return [u16 for u16 in [l[i] << 8 | l[i + 1] for i in range(0, len(l), 2)]]
 
 fprints = {}
 
@@ -48,6 +53,7 @@ class Fingerprint:
         self.cipher_suites = cipher_suites
         self.comp_methods = comp_methods
         self.extensions = extensions
+        self.extensions_norm = self.norm_ext(extensions)
         self.elliptic_curves = elliptic_curves
         self.ec_point_fmt = ec_point_fmt
         self.sig_algs = sig_algs
@@ -70,6 +76,11 @@ class Fingerprint:
                dbs(self.elliptic_curves), dbs(self.ec_point_fmt), dbs(self.sig_algs), dbs(self.alpn),
                dbs(self.key_share), dbs(self.psk_key_exchange_modes), dbs(self.supported_versions), dbs(self.cert_compression_algs),
                dbs(self.record_size_limit))
+
+    def norm_ext(exts):
+        exts_u16 = list_u8_to_u16(exts)
+        exts_u16.sort()
+        return list_u16_to_u8(exts_u16)
 
     @staticmethod
     def from_tls_data(tls):
@@ -244,6 +255,30 @@ class Fingerprint:
             self.id = self.get_fingerprint_v2()
         return self.id
 
+    def get_fingerprint_norm(self):
+        h = hashlib.sha1()
+        h.update(struct.pack('>HH', self.tls_version, self.ch_version))
+
+        update_arr(h, self.cipher_suites)
+        update_arr(h, self.comp_methods)
+
+        # TODO: check type, content (if len included), etc
+        # feed sorted list in
+        update_arr(h, self.extensions_norm)
+
+        update_arr(h, self.elliptic_curves)
+        update_arr(h, self.ec_point_fmt)
+        update_arr(h, self.sig_algs)
+        update_arr(h, self.alpn)
+
+        update_arr(h, self.key_share)
+        update_arr(h, self.psk_key_exchange_modes)
+        update_arr(h, self.supported_versions)
+        update_arr(h, self.cert_compression_algs)
+        update_arr(h, self.record_size_limit)
+
+        out, = struct.unpack('>q', h.digest()[0:8])
+        return out
 
 def dbs(s):
     return '\\x' + ''.join(['%02x' % c for c in s])
@@ -275,12 +310,6 @@ def add_fingerprint(fingerprint):
     b = sni_host.split('.')[0]
     if b not in fprints[f]:
         fprints[f].append(b)
-
-
-# convert lists of u16 to list of u8s
-def list_u16_to_u8(l):
-    return [u8 for pair in [[u16 >> 8, u16 & 0xff] for u16 in l] for u8 in pair]
-
 
 def parse_pcap(pcap_fname):
     global PRINT_SQL

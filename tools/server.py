@@ -89,31 +89,48 @@ def capture_pkts(iface="eth0"):
 def bytea(d):
     return buffer(''.join([chr(x) for x in d]))
 
+# TODO: check normalized fp in db
+# record normalized if not seen
 def add_useragent(out):
     fid = out['nid']
     try:
         db.cur.execute("SELECT * FROM fingerprints WHERE id=%s", [fid])
         rows = db.cur.fetchall()
-        if len(rows) == 0:
-            # Unique fingerprint, need to insert
-            db.cur.execute('''INSERT INTO fingerprints (id, record_tls_version, ch_tls_version,
-                            cipher_suites, compression_methods, extensions, named_groups,
-                            ec_point_fmt, sig_algs, alpn, key_share, psk_key_exchange_modes,
-                            supported_versions, cert_compression_algs, record_size_limit)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-            (fid, out['tls_version'], out['ch_version'], bytea(out['cipher_suites']),
-            bytea(out['compression_methods']), bytea(out['extensions']), bytea(out['curves']),
-            bytea(out['pt_fmts']), bytea(out['sig_algs']), bytea(out['alpn']),\
-            bytea(out['key_share']), bytea(out['psk_key_exchange_modes']), \
-            bytea(out['supported_versions']), bytea(out['cert_compression_algs']),\
-            bytea(out['record_size_limit'])))
-
-        db.cur.execute("INSERT INTO useragents (unixtime, id, useragent) VALUES (%s, %s, %s)",
-            (int(time.time()), fid, out['agent']))
-
+        # if len(rows) == 0:
+        #     # Unique fingerprint, need to insert
+        #     db.cur.execute('''INSERT INTO fingerprints (id, record_tls_version, ch_tls_version,
+        #                     cipher_suites, compression_methods, extensions, named_groups,
+        #                     ec_point_fmt, sig_algs, alpn, key_share, psk_key_exchange_modes,
+        #                     supported_versions, cert_compression_algs, record_size_limit)
+        #                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+        #     (fid, out['tls_version'], out['ch_version'], bytea(out['cipher_suites']),
+        #     bytea(out['compression_methods']), bytea(out['extensions']), bytea(out['curves']),
+        #     bytea(out['pt_fmts']), bytea(out['sig_algs']), bytea(out['alpn']),\
+        #     bytea(out['key_share']), bytea(out['psk_key_exchange_modes']), \
+        #     bytea(out['supported_versions']), bytea(out['cert_compression_algs']),\
+        #     bytea(out['record_size_limit'])))
+        
+        # Instead we insert to useragents only when the fingerprint is seen before to reduce overhead
+        if len(rows) > 0:
+            db.cur.execute("INSERT INTO useragents (unixtime, id, useragent) VALUES (%s, %s, %s)",
+                (int(time.time()), fid, out['agent']))
         db.conn.commit()
     except Exception as e:
-        print 'add_useragent(%s): %s' % (out, e)
+        print 'add_useragent(%s) for original fp: %s' % (out, e)
+        db.conn.rollback()
+
+    # No matter if the original fingerprint is seen before, we still try to insert the normalized one
+    norm_fid = out['norm_nid']
+    try:
+         # And check if the normalized fingerprint is seen before
+        # db.cur.execute("SELECT * FROM fingerprints_norm_ext WHERE id=%s", [norm_fid])
+        # rows = db.cur.fetchall()
+        # if len(rows) > 0:
+        db.cur.execute("INSERT INTO useragents (unixtime, id, useragent) VALUES (%s, %s, %s)",
+            (int(time.time()), norm_fid, out['agent']))
+        db.conn.commit()
+    except Exception as e:
+        print 'add_useragent(%s) for normalized fp: %s' % (out, e)
         db.conn.rollback()
 
 
@@ -161,6 +178,7 @@ def handle(conn, db_lock):
             out['cipher_suites']        = fp.cipher_suites
             out['compression_methods']  = fp.comp_methods
             out['extensions']           = fp.extensions
+            out['extensions_norm']      = fp.extensions_norm
             out['curves']               = fp.elliptic_curves
             out['pt_fmts']              = fp.ec_point_fmt
             out['sig_algs']             = fp.sig_algs
@@ -178,26 +196,33 @@ def handle(conn, db_lock):
             hid = struct.pack('!q', fpid)
             out['id'] = hid.encode('hex')
 
+            norm_fpid = fp.get_fingerprint_norm()
+            out['norm_nid'] = norm_fpid
+            norm_hid = struct.pack('!q', norm_fpid)
+            out['norm_id'] = norm_hid.encode('hex')
+
             t = int(time.time()) - 2*3600
             seen = 0
             rank = -1
             frac_seen = 0.0
+
+            # TODO: also return N-id for normalized fingerprint
             with db_lock:
                 #db.cur.execute('''select id, sum, rank from
                 #    (select id, sum(count), rank() over(order by sum(count) desc) from
                 #    measurements where unixtime < %s group by id) as ranked where id=%s''', [int(t), int(fp)])
 
-
+                # TODO: optimize speed
                 db.cur.execute('''SELECT id, seen, rank, q.cluster_rank, fps, cluster_seen
-                            FROM mv_ranked_fingerprints_week
-                            LEFT JOIN cluster_edges ON mv_ranked_fingerprints_week.id=cluster_edges.source
+                            FROM mv_ranked_fingerprints_norm_ext_week
+                            LEFT JOIN cluster_edges ON mv_ranked_fingerprints_norm_ext_week.id=cluster_edges.source
                             LEFT JOIN (SELECT cluster_rank, count(*) as fps, sum(seen) as cluster_seen
                                        FROM (SELECT source, cluster_rank, min(seen) as seen
                                              FROM cluster_edges
-                                             LEFT JOIN mv_ranked_fingerprints_week ON cluster_edges.source=mv_ranked_fingerprints_week.id
+                                             LEFT JOIN mv_ranked_fingerprints_norm_ext_week ON cluster_edges.source=mv_ranked_fingerprints_norm_ext_week.id
                                              GROUP BY cluster_rank, source) as a
                                         GROUP BY cluster_rank) as q ON cluster_edges.cluster_rank=q.cluster_rank
-                            WHERE id=%s limit 1;''', [int(fpid)])
+                            WHERE id=%s limit 1;''', [int(norm_fpid)])
                 rows = db.cur.fetchall()
                 cluster = 0
                 cluster_fps = 0
@@ -205,7 +230,7 @@ def handle(conn, db_lock):
                 if len(rows) > 0:
                     _, seen, rank, cluster, cluster_fps, cluster_seen = rows[0]
 
-                db.cur.execute('''select sum(seen) from mv_ranked_fingerprints_week''')
+                db.cur.execute('''select sum(seen) from mv_ranked_fingerprints_norm_ext_week''')
                 rows = db.cur.fetchall()
                 total = 1.0
                 if len(rows) > 0 and rows[0][0] is not None:
@@ -225,7 +250,8 @@ def handle(conn, db_lock):
             out['cluster_seen'] = intor0(cluster_seen)
             out['cluster_frac'] = float(intor0(cluster_seen)) / int(total)
             out['seen_total'] = int(total)
-
+            # TODO: also include normalized fp info (except clusters)
+            # OUT['normal_unique_cnt']
 
     resp = json.dumps(out)
     conn.write('HTTP/1.1 200 OK\r\nContent-type: application/json\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n%s' % (len(resp), resp))
