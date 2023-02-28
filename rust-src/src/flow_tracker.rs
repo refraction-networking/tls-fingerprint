@@ -195,6 +195,7 @@ impl FlowTracker {
                         curr_time.tm_sec = 0;
                         curr_time.tm_min = 0;
                         self.cache.add_measurement(fp_id as i64, norm_fp_id as i64, curr_time.to_timespec().sec as i32);
+                        self.cache.add_ch(norm_fp_id as i64, tcp_pkt.payload().to_vec(), curr_time.to_timespec().sec as i32);
                     }
                 }
                 Err(err) => {
@@ -214,6 +215,7 @@ impl FlowTracker {
         let c4cache = self.cache.flush_ipv4connections();
         let c6cache = self.cache.flush_ipv6connections();
         let ticket_sizes = self.cache.flush_ticket_sizes();
+        let ch_samples = self.cache.flush_ch_samples();
 
         let dsn = self.dsn.clone().unwrap();
 
@@ -409,6 +411,25 @@ impl FlowTracker {
                 }
             };
 
+            let insert_ch_samples = match thread_db_conn.prepare(
+                "INSERT
+                INTO ch_samples (
+                    id,
+                    unixtime,
+                    sample
+                )
+                VALUES ($1, $2, $3)
+                ON CONFLICT ON CONSTRAINT ch_samples_pkey DO UPDATE
+                SET (unixtime, sample) = ($2, $3);
+                "
+                ) {
+                    Ok(stmt) => stmt,
+                    Err(e) => {
+                        println!("Preparing insert_ch_samples failed: {}", e);
+                        return;
+                    }
+            };
+
             for (fp_id, fp) in client_fcache {
                 // insert original signature
                 let mut updated_rows = thread_db_conn.execute(&insert_fingerprint_original, &[
@@ -494,6 +515,13 @@ impl FlowTracker {
                     &(k.1 as i16), &(count), &(count)]);
                 if updated_rows.is_err() {
                     println!("Error updating ticket sizes: {:?}", updated_rows);
+                }
+            }
+
+            for (fp, ch) in ch_samples {
+                let updated_rows = thread_db_conn.execute(&insert_ch_samples, &[&(fp), &(ch.1), &(ch.0)]);
+                if updated_rows.is_err() {
+                    println!("Error updating ch samples: {:?}", updated_rows)
                 }
             }
 

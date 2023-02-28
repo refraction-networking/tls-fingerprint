@@ -37,6 +37,10 @@ pub struct MeasurementCache {
     ipv6_connections: HashMap<Flow, ConnectionIPv6>,
 
     raw_fingerprint_hll_count: HashSet<i64>,
+
+    updated_client_hellos: HashMap<i64, (Vec<u8>, i32)>,
+    updated_client_hellos_found: HashSet<i64>,
+
 }
 
 impl MeasurementCache {
@@ -58,6 +62,9 @@ impl MeasurementCache {
             ipv6_connections: HashMap::new(),
 
             raw_fingerprint_hll_count: HashSet::new(),
+
+            updated_client_hellos: HashMap::new(),
+            updated_client_hellos_found: HashSet::new(),
         }
     }
 
@@ -144,6 +151,13 @@ impl MeasurementCache {
                     }
                 }
             }
+        }
+    }
+
+    pub fn add_ch(&mut self, norm_fp_id: i64, bytes: Vec<u8>, ts: i32) {
+        if !self.updated_client_hellos_found.contains(&norm_fp_id) {
+            self.updated_client_hellos.insert(norm_fp_id, (bytes, ts));
+            self.updated_client_hellos_found.insert(norm_fp_id);
         }
     }
 
@@ -272,5 +286,9 @@ impl MeasurementCache {
     pub fn flush_ticket_sizes(&mut self) -> HashMap<(i64, i16), i64> {
         self.last_flush = time::now();
         mem::replace(&mut self.ticket_sizes, HashMap::new())
+    }
+
+    pub fn flush_ch_samples(&mut self) -> HashMap<i64, (Vec<u8>, i32)> {
+        mem::replace(&mut self.updated_client_hellos, HashMap::new())
     }
 }
