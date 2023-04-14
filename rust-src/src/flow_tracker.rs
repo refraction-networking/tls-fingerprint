@@ -414,7 +414,7 @@ impl FlowTracker {
             let insert_ch_samples = match thread_db_conn.prepare(
                 "INSERT
                 INTO ch_samples (
-                    id,
+                    norm_ext_id,
                     unixtime,
                     sample
                 )
