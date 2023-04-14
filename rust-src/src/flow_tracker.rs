@@ -184,7 +184,7 @@ impl FlowTracker {
                         }
 
                         // insert size of session ticket, if any
-                        fp.ticket_size.map(|size| self.cache.add_ticket_size(fp_id as i64, size));
+                        fp.ticket_size.map(|size| self.cache.add_ticket_size(norm_fp_id as i64, size));
 
                         // insert current fingerprint and measurement
                         self.cache.add_connection(&flow, fp_id as i64,
@@ -395,7 +395,7 @@ impl FlowTracker {
 
             let insert_ticket_size = match thread_db_conn.prepare(
                 "INSERT
-                INTO ticket_sizes (
+                INTO ticket_sizes_norm_ext (
                     id,
                     size,
                     count
