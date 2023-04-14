@@ -36,7 +36,7 @@ fn main() {
         .next()
         .unwrap();
 
-    let mut ft = FlowTracker::new();
+    let mut ft = FlowTracker::new(0);
 
     let from_pcap_file = false;
     let pcap_filename = "TMP";

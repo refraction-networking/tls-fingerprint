@@ -270,3 +270,48 @@ alpn_lev(PG_FUNCTION_ARGS)
 
     PG_RETURN_INT32(ret);
 }
+
+PG_FUNCTION_INFO_V1(greatest_bytea);
+Datum
+greatest_bytea(PG_FUNCTION_ARGS)
+{
+    bytea *arg1 = PG_GETARG_BYTEA_P(0);
+    bytea *arg2 = PG_GETARG_BYTEA_P(1);
+
+
+    uint8_t *b1 = VARDATA(arg1);
+    uint8_t *b2 = VARDATA(arg2);
+
+    size_t b1_len = VARSIZE(arg1)-VARHDRSZ;
+    size_t b2_len = VARSIZE(arg2)-VARHDRSZ;
+
+
+    if (b1_len != b2_len) {
+        ereport(ERROR, (errmsg("inputs must be the same length")));
+    }
+
+    // In place
+    int i;
+    for (i=0; i<b1_len; i++) {
+        if (b2[i] > b1[i]) {
+            b1[i] = b2[i];
+        }
+    }
+    PG_RETURN_BYTEA_P(arg1);
+
+    /*
+    bytea *result = (bytea *) palloc(VARHDRSZ+b1_len);
+    SET_VARSIZE(result, VARHDRSZ+b1_len);
+
+    uint8_t *p = VARDATA(result);
+    memcpy(p, b1, b1_len);
+    int i;
+    for (i=0; i<b1_len; i++) {
+        if (b2[i] > p[i]) {
+            p[i] = b2[i];
+        }
+    }
+
+    PG_RETURN_BYTEA_P(result);
+    */
+}

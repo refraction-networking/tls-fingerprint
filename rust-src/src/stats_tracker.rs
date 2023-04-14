@@ -1,6 +1,5 @@
 extern crate time;
 
-use std::time::{Duration, Instant};
 use std::ops::Sub;
 use common::{HelloParseError};
 
