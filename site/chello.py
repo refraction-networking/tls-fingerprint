@@ -14,7 +14,7 @@ import os
 import pickle
 import math
 
-
+# TODO: new endpoints for N-ids
 
 UPLOAD_FOLDER = '/tmp/'
 ALLOWED_EXTENSIONS = set(['pcap', 'pcapng'])
@@ -512,16 +512,41 @@ class TLSFingerprint(object):
         #db.conn.rollback()
         db.cur.execute("SELECT count(*) as d, useragent from useragents where id=%s group by useragent order by d desc", [int(self.nid)])
         rows = db.cur.fetchall()
-        useragents = [row[1] for row in rows]
+        useragents = []
+
+        if len(rows) > 0:
+            useragents = [row[1] for row in rows]
+        else:
+            # check normalized form
+            db.cur.execute('''SELECT * FROM fingerprint_map WHERE id=%s''', [int(self.nid)])
+            rows = db.cur.fetchall()
+            if len(rows) > 0:
+                norm_id = rows[0][1] # norm_ext_id
+                db.cur.execute("SELECT count(*) as d, useragent from useragents where id=%s group by useragent order by d desc", [int(norm_id)])
+                rows = db.cur.fetchall()
+                if len(rows) > 0:
+                    useragents = [row[1] for row in rows]
+
         return useragents
 
-    def get_rank(self):
+    def get_norm_id(self):
         db = get_db()
+        nid = int(self.nid)
+        db.cur.execute('''SELECT * FROM fingerprint_map WHERE id=%s''', [nid])
+        rows = db.cur.fetchall()
+        if len(rows) > 0:
+            return int(rows[0][1])
+        return nid # assuming self.nid is always "good"
+
+    def get_rank(self):
+        nid = self.get_norm_id()
+        db = get_db()
+
         #db.cur.execute('''SELECT id, n, r FROM
         #    (SELECT id, SUM(count) as n, RANK() OVER(ORDER BY SUM(count) DESC) as r, MAX(t) FROM
         #    (SELECT id, count, TIMESTAMP WITH TIME ZONE 'epoch' + unixtime * INTERVAL '1 second' as t FROM measurements) as ts
         #    where age(now(), t) > '2 hour' group by id order by n desc) as j where id=%s''', [int(self.nid)])
-        db.cur.execute('''SELECT * FROM mv_ranked_fingerprints where id=%s''', [int(self.nid)])
+        db.cur.execute('''SELECT * FROM mv_ranked_fingerprints_norm_ext where id=%s''', [nid])
         rows = db.cur.fetchall()
         self.seen = 0
         self.rank = -1
@@ -531,7 +556,7 @@ class TLSFingerprint(object):
             self.seen = rows[0][1]
             self.rank = rows[0][2]
 
-        db.cur.execute('''SELECT * FROM mv_ranked_fingerprints_week where id=%s''', [int(self.nid)])
+        db.cur.execute('''SELECT * FROM mv_ranked_fingerprints_norm_ext_week where id=%s''', [nid])
 
         rows = db.cur.fetchall()
         self.seen_week = 0
@@ -561,47 +586,68 @@ class TLSFingerprint(object):
         levenshtein(self.get_alpns(), other.get_alpns()) + \
         levenshtein(self.get_sig_algs(), other.get_sig_algs())
 
+    # get related (normalize to the same N/fp) real fingerprints
     def get_related(self, fetch_labels=False):
         #from prod import db
         db = get_db()
         #db.conn.rollback()
 
-        total_seen = get_total_seen()
-        db.cur.execute('''select * from (select id, seen,
-        abs((select record_tls_version from fingerprints where id=%s) - record_tls_version) +
-        abs((select ch_tls_version from fingerprints where id=%s) - ch_tls_version) +
-        u16_lev((select cipher_suites from fingerprints where id=%s), cipher_suites) +
-        u8_lev((select compression_methods from fingerprints where id=%s), compression_methods) +
-        u16_lev((select extensions from fingerprints where id=%s), extensions) +
-        u16_lev((select named_groups from fingerprints where id=%s), named_groups) +
-        u8_lev_skiphdr((select ec_point_fmt from fingerprints where id=%s), ec_point_fmt) +
-        u16_lev_skiphdr((select sig_algs from fingerprints where id=%s), sig_algs) +
-        alpn_lev((select alpn from fingerprints where id=%s), alpn) +
-            u16_lev((select key_share from fingerprints where id=%s), key_share) +
-            u8_lev((select psk_key_exchange_modes from fingerprints where id=%s),
-                   psk_key_exchange_modes) +
-            u16_lev((select supported_versions from fingerprints where id=%s), supported_versions) +
-            u16_lev_skipu8hdr((select cert_compression_algs from fingerprints where id=%s),
-                    cert_compression_algs) +
-            u16_lev((select record_size_limit from fingerprints where id=%s), record_size_limit)
-        as lev from (select fingerprints.*, seen from mv_ranked_fingerprints_week left join fingerprints on mv_ranked_fingerprints_week.id=fingerprints.id where seen > 1000) as a order by lev) as q where lev < 10''', \
-                    [self.nid]*14)
-
-        rows = db.cur.fetchall()
         related = []
-        for row in rows:
-            c_id, c_seen, lev_dist = row
-            if c_seen > 10000 and lev_dist < 8 and c_id != self.nid:
-                labels = []
-                if fetch_labels:
-                    labels = get_labels_for_fp(c_id)
-                related.append({'id':   struct.pack('!q', c_id).encode('hex'),
-                          'lev':  lev_dist,
-                          'seen': c_seen,
-                          'labels': labels,
-                          'frac': 100*float(c_seen)/total_seen})
-        return related
 
+        # total_seen = get_total_seen()
+        # db.cur.execute('''select * from (select id, seen,
+        # abs((select record_tls_version from fingerprints where id=%s) - record_tls_version) +
+        # abs((select ch_tls_version from fingerprints where id=%s) - ch_tls_version) +
+        # u16_lev((select cipher_suites from fingerprints where id=%s), cipher_suites) +
+        # u8_lev((select compression_methods from fingerprints where id=%s), compression_methods) +
+        # u16_lev((select extensions from fingerprints where id=%s), extensions) +
+        # u16_lev((select named_groups from fingerprints where id=%s), named_groups) +
+        # u8_lev_skiphdr((select ec_point_fmt from fingerprints where id=%s), ec_point_fmt) +
+        # u16_lev_skiphdr((select sig_algs from fingerprints where id=%s), sig_algs) +
+        # alpn_lev((select alpn from fingerprints where id=%s), alpn) +
+        #     u16_lev((select key_share from fingerprints where id=%s), key_share) +
+        #     u8_lev((select psk_key_exchange_modes from fingerprints where id=%s),
+        #            psk_key_exchange_modes) +
+        #     u16_lev((select supported_versions from fingerprints where id=%s), supported_versions) +
+        #     u16_lev_skipu8hdr((select cert_compression_algs from fingerprints where id=%s),
+        #             cert_compression_algs) +
+        #     u16_lev((select record_size_limit from fingerprints where id=%s), record_size_limit)
+        # as lev from (select fingerprints.*, seen from mv_ranked_fingerprints_week left join fingerprints on mv_ranked_fingerprints_week.id=fingerprints.id where seen > 1000) as a order by lev) as q where lev < 10''', \
+        #             [self.nid]*14)
+        #
+        # rows = db.cur.fetchall()
+        # related = []
+        # for row in rows:
+        #     c_id, c_seen, lev_dist = row
+        #     if c_seen > 10000 and lev_dist < 8 and c_id != self.nid:
+        #         labels = []
+        #         if fetch_labels:
+        #             labels = get_labels_for_fp(c_id)
+        #         related.append({'id':   struct.pack('!q', c_id).encode('hex'),
+        #                   'lev':  lev_dist,
+        #                   'seen': c_seen,
+        #                   'labels': labels,
+        #                   'frac': 100*float(c_seen)/total_seen})
+        
+        # show fingerprints with same norm_id instead
+        norm_id = self.get_norm_id()        
+        
+        ## first check how many in total
+        db.cur.execute('''SELECT count(1) FROM fingerprint_map as map WHERE map.norm_ext_id=%s;''', [norm_id])
+        rows = db.cur.fetchall()
+        if len(rows) == 0:
+            return related
+
+        # if more than 16 known fingerprints normalize to this one, show top 10
+        if rows[0][0] > 16:
+            db.cur.execute('''SELECT id FROM fingerprint_map as map WHERE map.norm_ext_id = %s AND id != %s ORDER BY map.count DESC LIMIT 10;''', [norm_id, self.nid])
+        else: # show all (no more than 16)
+            db.cur.execute('''SELECT id FROM fingerprint_map as map WHERE map.norm_ext_id = %s AND id != %s;''', [norm_id, self.nid])
+            
+        rows = db.cur.fetchall()
+        for row in rows:
+            related.append({'id':   struct.pack('!q', row[0]).encode('hex')})
+        return related
 
     def get_labels(self):
         return get_labels_for_fp(self.nid)
@@ -641,10 +687,24 @@ tlsConn.ApplyPreset(&clientHelloSpec)
         )
         return prefix, code, suffix
 
-
 def lookup_fingerprint(fid):
     db = get_db()
     db.cur.execute("SELECT * FROM fingerprints WHERE id=%s", [int(fid)])
+    rows = db.cur.fetchall()
+    if len(rows) == 0:
+        return None
+    #fid_hex = struct.pack('!q', int(fid)).encode('hex')
+
+    _, tls_ver, ch_ver, cipher_suites, comp_methods, exts, curves, pt_fmt, sig_algs, alpn, \
+    key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit = rows[0]
+
+    return TLSFingerprint(fid, tls_ver, ch_ver, cipher_suites, comp_methods, exts, curves, \
+            pt_fmt, sig_algs, alpn,\
+            key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
+
+def lookup_fingerprint_norm(fid):
+    db = get_db()
+    db.cur.execute("SELECT * FROM fingerprints_norm_ext WHERE id=%s", [int(fid)])
     rows = db.cur.fetchall()
     if len(rows) == 0:
         return None
@@ -1686,12 +1746,13 @@ def format_seen(seen):
 def browsers():
     return render_template('browsers.html')
 
-@app.route('/id/<fid>')
+# TODO: update these 2 id routes to reflect normalized fps 
+@app.route('/id/<fid>') # hex
 def fingerprint_hex(fid):
     fid, = struct.unpack('!q', fid.decode('hex'))
     return fingerprint(fid)
 
-@app.route('/nid/<fid>')
+@app.route('/nid/<fid>') # decimal
 def fingerprint(fid):
     db = get_db()
 
@@ -1710,11 +1771,11 @@ def fingerprint(fid):
     seen = format_seen(seen)
     seen_wk = format_seen(seen_wk)
 
-    db.cur.execute("SELECT count(*) from fingerprints") # 48 ms
+    db.cur.execute("SELECT count(*) from fingerprints_norm_ext") # 48 ms
     rows = db.cur.fetchall()
     uniq = rows[0][0]
 
-    db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_week")
+    db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week")
     rows = db.cur.fetchall()
     uniq_wk = rows[0][0]
 
@@ -1797,6 +1858,117 @@ def fingerprint(fid):
                 cluster_fps=cluster_fps, cluster_seen=cluster_seen, cluster_rank=cluster_rank,\
                 cluster_pct=cluster_pct)
 
+@app.route('/id/N/<fid>') # hex
+def fingerprint_norm_hex(fid):
+    fid, = struct.unpack('!q', fid.decode('hex'))
+    return fingerprint_norm(fid)
+
+@app.route('/nid/N/<fid>') # decimal
+def fingerprint_norm(fid):
+    db = get_db()
+
+    times = [time.time()]
+    f = lookup_fingerprint_norm(int(fid))    # 82 ms
+    if f is None:
+        return 'Not found'
+    fid_hex = struct.pack('!q', int(fid)).encode('hex')
+
+    times.append(time.time())
+    rank, seen, frac_seen, rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
+    times.append(time.time())
+
+    if seen < 100:
+        frac_seen = 0.00
+    seen = format_seen(seen)
+    seen_wk = format_seen(seen_wk)
+
+    # count unique normalized fingerprints
+    db.cur.execute("SELECT count(*) from fingerprints_norm_ext") # 48 ms
+    rows = db.cur.fetchall()
+    uniq = rows[0][0]
+
+    db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week") # TODO: optimize
+    rows = db.cur.fetchall()
+    uniq_wk = rows[0][0]
+
+    times.append(time.time())
+    tls_ver = f.get_tls_version()  #
+    times.append(time.time())
+    ch_ver = f.get_ch_version()
+    times.append(time.time())
+    ciphers = f.get_ciphers()
+    times.append(time.time())
+    comps = f.get_comp_methods()
+    times.append(time.time())
+    exts = f.get_extensions()
+    times.append(time.time())
+    alpns = f.get_alpns()
+    times.append(time.time())
+    curves = f.get_curves()
+    times.append(time.time())
+    sig_algs = f.get_sig_algs()
+    times.append(time.time())
+    pt_fmts = f.get_pt_fmts()
+    times.append(time.time())
+    useragents = f.get_useragents()  # 128 ms
+    times.append(time.time())
+    ciphers_str = f.get_hex_cipher_suite_str()  #
+    times.append(time.time())
+    related=f.get_related()     # 372 ms, 130 ms with > clause
+    times.append(time.time())
+
+    key_share = f.get_key_share()
+    psk_key_exchange_modes = f.get_psk_key_exchange_modes()
+    supported_versions = f.get_supported_versions()
+    cert_compression_algs = f.get_cert_compression_algs()
+    record_size_limit = f.get_record_size_limit()
+
+    labels = f.get_labels()
+
+    ext_str = f.get_hex_extensions_str()
+    curves_str = f.get_hex_curves_str()
+    version_str = f.get_hex_supported_versions_str()
+    sigalgs_str = f.get_hex_sigalgs_str()
+
+    times = [times[i]-times[i-1] for i in xrange(1, len(times))]
+
+    utls_code_prefix, utls_code_body_unescaped, utls_code_suffix = f.generate_utls_code()
+
+    # html escape utls_code_body first, then replace special strings
+    # to highlight unsupported things with darkred
+    utls_code_body = str(escape(utls_code_body_unescaped))
+    utls_code_body_bck = str(utls_code_body)
+    utls_code_body = utls_code_body.replace(utls_support.unknown_start, '<span style="color: darkred;">')
+    utls_code_body = utls_code_body.replace(utls_support.unknown_end, '</span>')
+    if utls_code_body != utls_code_body_bck:
+        utls_code_body = '// This fingerprint includes feature(s), not fully supported by TLS.\n' \
+                         '// uTLS client with this fingerprint will only be able to to talk to servers,\n' \
+                         '// that also do not support those features. \n' + \
+                         utls_code_body
+
+    cluster_fps, cluster_seen, cluster_rank = get_cluster_metadata(fid)
+    cluster_pct = 100.0*frac_seen_wk
+    if cluster_seen != None:
+        cluster_pct = 100*float(cluster_seen)/get_total_seen_week()
+
+
+    return render_template('nid.html', id=fid_hex, tls_ver=tls_ver, \
+                ch_ver=ch_ver, ciphers=ciphers, \
+                comps=comps, extensions=exts, \
+                alpns=alpns, curves=curves, sig_algs=sig_algs, \
+                pt_fmts=pt_fmts, useragents=useragents, \
+                seen=seen, rank=rank, frac=100.0*frac_seen, unique=uniq, nid=fid, \
+                seen_wk=seen_wk, rank_wk=rank_wk, frac_wk=100.0*frac_seen_wk, unique_wk=uniq_wk, \
+                ciphers_str=ciphers_str, ext_str=ext_str, curves_str=curves_str, version_str=version_str,
+                sigalgs_str=sigalgs_str,
+                related=related, labels=labels, times=times,
+                utls_code_prefix=utls_code_prefix, utls_code_body=utls_code_body, \
+                utls_code_suffix=utls_code_suffix,\
+                key_share=key_share, psk_key_exchange_modes=psk_key_exchange_modes,
+                supported_versions=supported_versions,cert_compression_algs=cert_compression_algs,\
+                record_size_limit=record_size_limit,\
+                cluster_fps=cluster_fps, cluster_seen=cluster_seen, cluster_rank=cluster_rank,\
+                cluster_pct=cluster_pct)
 
 #def application(env, start_response):
 #    start_response('200 OK', [('Content-Type','text/html')])
@@ -1807,19 +1979,16 @@ def fingerprint(fid):
 def session_tickets():
     db = get_db()
 
-    db.cur.execute('''select sum(seen), (select sum(seen) from mv_ranked_fingerprints_week) from
-                fingerprints left join mv_ranked_fingerprints_week on fingerprints.id=mv_ranked_fingerprints_week.id where position('\\x0023' in extensions)%2=1;''')
+    db.cur.execute('''select sum(seen), (select sum(seen) from mv_ranked_fingerprints_norm_ext_week) from fingerprints_norm_ext left join mv_ranked_fingerprints_norm_ext_week on fingerprints_norm_ext.id=mv_ranked_fingerprints_norm_ext_week.id where position('\\x0023' in normalized_extensions)%2=1;''')
     seen, tot_seen = db.cur.fetchall()[0]
     pct_tickets = 100*float(seen)/float(tot_seen)
 
-    db.cur.execute('''select size, round((100*cast(sum(count) as decimal) / (select sum(count) from ticket_sizes)), 2) as c from ticket_sizes group by size order by c desc;''')
+    db.cur.execute('''select size, round((100*cast(sum(count) as decimal) / (select sum(count) from ticket_sizes_norm_ext)), 2) as c from ticket_sizes_norm_ext group by size order by c desc LIMIT 1000;''')
 
     data = []
-    i = 1
-    for row in db.cur.fetchall():
+    for i, row in enumerate(db.cur.fetchall()):
         size, pct_conns = row
-        data.append({'rank': i, 'size': size, 'pct_conns': pct_conns})
-        i += 1
+        data.append({'rank': i+1, 'size': size, 'pct_conns': pct_conns})
 
     return render_template('tickets.html', data=data, pct_tickets=pct_tickets)
 
@@ -1968,7 +2137,7 @@ def get_version_breakdown():
     max_out = sorted(max_out, key=lambda x: x['seen'], reverse=True)
     return out, max_out
 
-
+# add top normalized fps
 @app.route('/top/groups')
 def groups():
     data = get_generic_top('named_groups', curve_dict)
@@ -2117,7 +2286,9 @@ def upload_file():
             return render_template('pcap-results.html', results=out)
     return render_template('pcap.html')
 
-
+@app.route('/norm_fp', methods=['GET'])
+def norm_fp():
+    return render_template('norm_fp.html')
 
 @app.route('/labels')
 def labels():
