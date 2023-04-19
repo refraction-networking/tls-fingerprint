@@ -44,22 +44,35 @@ def bytea_to_u8_strings(bya, lookup_dict):
 def lookup_fingerprint(fid):
     db = get_db()
     # TODO make this a left join on all 3 tables...
-    db.cur.execute("SELECT * FROM fps WHERE id=%s", [int(fid)])
+    db.cur.execute('''SELECT q.*, t.*, tp.* 
+        FROM fps f
+        LEFT JOIN quic_fingerprints q
+        ON f.qid = q.id
+        LEFT JOIN tls_fingerprints_norm_ext t
+        ON f.tlsid = t.id
+        LEFT JOIN transport_params tp
+        ON f.tpid = tp.id
+        WHERE f.id=%s''', [int(fid)])
     rows = db.cur.fetchall()
     if len(rows) == 0:
         return None
+
     #fid_hex = struct.pack('!q', int(fid)).encode('hex')
 
 
     # TODO break out qTLSFingerprint(), QUICFingerprint, and TransportParamsFingerprint
+    qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len, \
+    tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, pt_fmt, sig_algs, alpn, \
+    key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit, \
+    tpid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit = rows[0]
 
-    _, tls_ver, ch_ver, cipher_suites, comp_methods, exts, curves, pt_fmt, sig_algs, alpn, \
-    key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit = rows[0]
-
-    return TLSFingerprint(fid, tls_ver, ch_ver, cipher_suites, comp_methods, exts, curves, \
+    tls = qTLSFingerprint(tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, \
             pt_fmt, sig_algs, alpn,\
             key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
+    quic = QUICFingerprint(qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len)
+    tp = TransportParamsFingerprint(tpid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit)
 
+    return (quic, tls, tp)
 
 
 class qTLSFingerprint(object):
@@ -292,7 +305,7 @@ class qTLSFingerprint(object):
 
 
 class QUICFingerprint(object):
-    def __init__(self, nid, version, sid_len, did_len, frames, token_len, pkt_num):
+    def __init__(self, nid, version, sid_len, did_len, pkt_num, frames, token_len):
         self.nid = nid
         self.version = version
         self.sid_len = sid_len
@@ -304,7 +317,8 @@ class QUICFingerprint(object):
 
 
 class TransportParamsFingerprint(object):
-    def __init__(self, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit):
+    def __init__(self, nid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit):
+        self.nid = nid
         self.max_udp_payload_size = max_udp_payload_size
         self.initial_max_data = initial_max_data
         self.initial_max_stream_data_bidi_local = initial_max_stream_data_bidi_local
