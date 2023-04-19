@@ -32,7 +32,7 @@
             </tr>
             <tr>
                 <td><b>Frames</b></td>
-                <td>{{ frames }}</td>
+                <td>{% for f in frames %}{{ f.s }}<br/>{% endfor %}</td>
             </tr>
             <tr>
                 <td><b>Token length</b></td>
@@ -42,105 +42,8 @@
                 <td><b>Packet Number</b></td>
                 <td>{{ pkt_num }}</td>
             </tr>
-
-            <h3>QUIC Transport Parameters</h3>
-            <tr>
-                <td><b>max_idle_timeout</b></td>
-                <td>{{ max_idle_timeout }} ms</td>
-            </tr>
-            <tr>
-                <td><b>max_udp_payload_size</b></td>
-                <td>{{ max_udp_payload_size }}</td>
-            </tr>
-            <tr>
-                <td><b>initial_max_data</b></td>
-                <td>{{ initial_max_data }}</td>
-            </tr>
-            <tr>
-                <td><b>initial_max_stream_data_bidi_local</b></td>
-                <td>{{ initial_max_stream_data_bidi_local }}</td>
-            </tr>
-            <tr>
-            <td><b>initial_max_stream_data_bidi_remote</b></td>
-                <td>{{ initial_max_stream_data_bidi_remote }}</td>
-            </tr>
-            <tr>
-                <td><b>initial_max_stream_data_uni</b></td>
-                <td>{{ initial_max_stream_data_uni }}</td>
-            </tr>
-            <tr>
-                <td><b>initial_max_streams_bidi</b></td>
-                <td>{{ initial_max_streams_bidi }}</td>
-            </tr>
-            <tr>
-                <td><b>initial_max_streams_uni</b></td>
-                <td>{{ initial_max_streams_uni }}</td>
-            </tr>
-            <tr>
-                <td><b>ack_delay_exponent</b></td>
-                <td>{{ ack_delay_exponent }}</td>
-            </tr>
-            <tr>
-                <td><b>max_ack_delay</b></td>
-                <td>{{ max_ack_delay }}</td>
-            </tr>
-            <tr>
-                <td><b>disable_active_migration</b></td>
-                <td>{{ disable_active_migration }}</td>
-            </tr>
-            <tr>
-                <td><b>active_connection_id_limit</b></td>
-                <td>{{ active_connection_id_limit }}</td>
-            </tr>
-
-            <h3>TLS Client Hello</h3>
-            <tr>
-                <td><b>TLS Version</b></td><td>{{ tls_ver }}</td></tr>
-
-            <tr><td><b>Handshake Version</b></td><td>{{ ch_ver }}</td></tr>
-
-            <tr><td><b>Cipher Suites</b><br/>
-                    <a class="small" href="/match/cipher/{{ ciphers_str }}">exact match</a></td>
-                <td>{% for cs in ciphers %}<a href="/find/cipher/{{ '%04x' % cs.n }}">{{ cs.s }}</a>
-                <br/>{% endfor %}</td></tr>
-            <tr><td><b>Compression Methods</b></td><td>{% for c in comps %}{{ c.s }}<br/>{% endfor %}</td></tr>
-            <tr><td><b>Extensions</b><br/>
-                    <a class="small" href="/match/extension/{{ ext_str }}">exact match</a></td>
-                <td>{% for e in extensions %}<a href="/find/extension/{{ '%04x' % e.n }}">{{ e.s }}</a>
-                <br/>{% endfor %}</td></tr>
-            <tr><td><b>Supported Groups</b><br/>
-                    <a class="small" href="/match/group/{{ curves_str }}">exact match</a></td>
-                <td>{% for c in curves %}<a href="/find/group/{{ '%04x'%c.n }}">{{ c.s }}</a>
-                <br/>{% endfor %}</td></tr>
-            <tr><td><b>Signature Algorithms</b><br/>
-                    <a class="small" href="/match/sigalg/{{ sigalgs_str }}">exact match</a></td>
-                <td>{% for sa in sig_algs %}{{ sa }}<br/>{% endfor %}</td></tr>
-            <tr><td><b>EC Point Formats</b></td><td>{% for c in pt_fmts %}{{ c.s }}<br/>{% endfor %}</td></tr>
-            <tr><td><b>ALPN</b></td><td>{% for a in alpns %}{{ a }}<br/>{% endfor %}</td></tr>
-            <tr><td><b>Key Share</b></td>
-                <td>{% for k in key_share %}{{ k.s }} - {{ k.key_len}}-byte key
-                <br/>{% endfor %}</td></tr>
-
-            <tr><td><b>PSK Key Exchange Modes</b></td>
-                <td>{% for k in psk_key_exchange_modes %}{{ k.s }}
-                <br/>{% endfor %}</td></tr>
-
-            <tr><td><b>Supported Versions</b>
-                    {% if version_str|length > 0 %}<br/>
-                    <a class="small" href="/match/supported_version/{{ version_str }}">exact match</a>{% endif %}</td>
-                    <td>{% for v in supported_versions %}<a href="/find/supported_version/{{ '%04x'%v.n }}">{{ v.s }}</a>
-                <br/>{% endfor %}</td></tr>
-
-
-            <tr><td><b>Certificate Compression Algorithms</b></td>
-                <td>{% for k in cert_compression_algs %}{{ k.s }}
-                <br/>{% endfor %}</td></tr>
-
-            <tr><td><b>Record Size Limit</b></td><td>{% if record_size_limit is not none %}{{ record_size_limit }}{% endif %}</td></tr>
-
-            <tr><td>nid</td><td>{{ nid }}</td></tr>
           </tbody>
-
+        </table>
         <!--
         </table>
         <h3>Times seen (per hour)</h3>

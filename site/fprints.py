@@ -1,4 +1,5 @@
 from tlsutil import *
+from qutil import *
 
 def tls_ver_to_str(ver):
     d = {0x0200:    'SSL 2.0',
@@ -40,9 +41,31 @@ def bytea_to_u8_strings(bya, lookup_dict):
         out.append({'n':u8, 's':name})
     return out
 
+def lookup_qfp(db, qid):
+
+    db.cur.execute('SELECT * FROM quic_fingerprints WHERE id=%s', [int(qid)])
+    rows = db.cur.fetchall()
+    if len(rows) == 0:
+        return None
+
+    qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len = rows[0]
+    return QUICFingerprint(qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len)
+
+def lookup_tls(db, tid):
+    db.cur.execute('SELECT * FROM tls_fingerprints_norm_ext WHERE id=%s', [int(tid)])
+    rows = db.cur.fetchall()
+    if len(rows) == 0:
+        return None
+
+    tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, pt_fmt, sig_algs, alpn, \
+    key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit = rows[0]
+
+    return qTLSFingerprint(tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, \
+            pt_fmt, sig_algs, alpn,\
+            key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
+
 # Lookup qTLSFingerprint, QUIC, and TP
-def lookup_fingerprint(fid):
-    db = get_db()
+def lookup_fingerprint(db, fid):
     # TODO make this a left join on all 3 tables...
     db.cur.execute('''SELECT q.*, t.*, tp.* 
         FROM fps f
@@ -314,6 +337,21 @@ class QUICFingerprint(object):
         self.token_len = token_len
         self.pkt_num = pkt_num
     # TODO: string getters
+
+    def get_version(self):
+        return self.version.hex()
+    def get_pkt_num(self):
+        return self.pkt_num.hex()
+    def get_frames_str(self):
+        out = []
+        for fid in self.frames:
+            fid = int.from_bytes(fid, byteorder='big')
+            fs = 'UNKNOWN'
+            if fid in quic_frame_types:
+                fs = quic_frame_types[fid]
+            name = '%s (0x%02x)' % (fs, fid)
+            out.append({'n':fid, 's':name})
+        return out
 
 
 class TransportParamsFingerprint(object):
