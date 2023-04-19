@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{% endblock %}
+{% block home_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="jumbotron">
+        <h1>QUIC Fingerprints</h1>
+	<p class="lead">We have started to collect anonymized QUIC Client Initial (and previously <a href="https://tlsfingerprint.io">TLS Client Hello</a>) messages from the
+        <a href="https://colorado.edu">University of Colorado Boulder</a> campus network
+        to measure the popularity of various implementations actually used in practice.</p>
+
+	<p>This page demonstrates our preliminary work in collecting and analyzing QUIC fingerprints</p>
+
+        <div id="your-browser" class="alert alert-primary" style="display: none">
+        Your browser generates the fingerprint <a id="fp-url" href="#"></a><span id="fp-cluster-span" style="display: none"> (from <a href="#" id="fp-cluster-url">Cluster #<span id="fp-cluster"></span></a>)</span>,
+        which is seen in <b><span id="fp-pct"></span>%</b> of connections, making it ranked <b>#<span id="fp-rank"></span></b>
+        by popularity.
+        </div>
+
+	<h3>QUIC fingerprints</h3>
+	<p>QUIC uses TLS 1.3 for its handshake. Like TLS itself, QUIC's handshake has
+	identifiable features that could form a unique fingerprint, allowing a network
+	adversary to tell what implementation is involved in a QUIC connection.</p>
+
+	<p>
+	Some features in the first packet sent by the client (Client Initial) that could be
+	used to fingerprint QUIC clients:
+	<ul>
+	  <li><b>Client Hello</b> - The Client Initial packet contains a standard TLS 1.3 Client
+		  Hello message, encrypted with "default" key. All of the features used in
+		  TLS fingerprinting can be used to fingerprint QUIC clients as well.</li>
+	  <li><b>SID/DID length</b> The QUIC header contains a variable-length
+		  connection ID for both the source and destination. Each of
+		  these IDs are generally chosen randomly, but may be any length
+		  between 0 and 20 bytes. The length chosen is an
+		  implementation-specific value.</li>
+	  <li><b>QUIC version</b> most clients currently send version 1.</li>
+	  <li><b>Frame types</b> The Client Initial message contains at least one
+		  CRYPTO frame (containing the encrypted Client Hello message),
+		  and likely at least one PADDING frame (the total length must
+		  be at least 1200 bytes). The Initial packet may also contain
+		  ACK, PING, and CONNECTION_CLOSE frames. The order of these
+		  frames, and also how they are
+		  interleaved or fragmented is up to the implementation.</li>
+	  <li><b>Token length</b> The client may send a token from a previous
+		  message, and its length could be server-implementation
+		  dependent.</li>
+	  <li><b>Packet number</b> The QUIC specifications do not require that
+		  the Client Initial packet starts with 0. In addition, because
+		  this is a variable-length integer, there are multiple valid
+		  ways to encode the same number. Implementations may choose to
+		  start at different values (e.g. 1 or random).</li>
+	  <li><b>QUIC transport parameters</b> Inside the Client Hello, one of
+		  the extensions that must be included details 
+		  <a href="https://datatracker.ietf.org/doc/html/rfc9001#section-8.2">QUIC-specific
+		  transport parameters</a>. Currently, there are
+	  	   <a href="https://datatracker.ietf.org/doc/html/rfc9000#transport-parameter-definitions">a
+		  few dozen</a> defined. Many of these values pertain to
+	  	flow control parameters that may be
+		implementation-specific.</li>
+	 </ul>
+	</p>
+
+	<!--
+        <h3>Why collect fingerprints?</h3>
+        <p>
+        TLS fingerprints allow us to identify problems in common TLS applications. For example,
+        we can investigate the ability of censorship circumvention tools to mimic and blend in with
+        other popular TLS implementations. Censors can <a href="https://groups.google.com/forum/#!topic/traffic-obf/BpFSCVgi5rs">block</a> circumvention tools that send uncommon
+        TLS fingerprints. To combat this, we can observe the fingerprints that circumvention tools
+        produce and compare them to our dataset. Less popular fingerprints are at risk of being
+        blocked by censors at low cost.
+        </p>
+        <p>
+        We can also measure
+        <a href="/weak-ciphers">Weak cipher suites</a> still in widespread use, and track
+        the popularity of <a href="/top/versions">TLS Versions</a> and
+        <a href="/extensions">Extensions</a>.
+        </p>
+
+        <h3><a href="https://github.com/refraction-networking/utls">
+            <img src="/static/utls-logo-small.png" style="vertical-align: bottom"/> uTLS Library</a>
+        </h3>
+        <p>
+        To help mimic rapidly-changing popular TLS implementations, we have developed
+        the <a href="https://github.com/refraction-networking/utls">uTLS</a> library,
+        that provides fine-grained control over the Client Hello message, including
+        what cipher suites and extensions are sent. This site also provides
+        auto-generated uTLS configuration code to mimic fingerprints we observe.
+        </p>
+
+        <h3>More details</h3>
+        <p>
+        Details on our collected data, analysis, and uTLS library can be found in
+        our paper:
+
+        </p>
+        <p>
+        <div class="row alert alert-primary">
+         <div class="col-1">
+        <a class="btn btn-primary" href="/static/frolov2019.pdf" role="button">Paper</a><br/>
+         </div>
+         <div class="col-8">
+        <a href="/static/frolov2019.pdf"><b>The use of TLS in Censorship Circumvention</b></a><br/>
+        <i><a href="https://twitter.com/srfrolov">Sergey Frolov</a> and <a href="https://twitter.com/ewust">Eric Wustrow</a> (University of Colorado Boulder)</i></br>
+        In <a href="https://www.ndss-symposium.org/ndss2019/">
+            <i>The Network and Distributed System Security Symposium 2019 (NDSS'19)</i></a>
+         </div>
+         </div>
+	-->
+     </div>
+    </main>
+<script src="/static/fingerprint.js"></script>
+
+{% endblock %}
