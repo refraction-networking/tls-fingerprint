@@ -11,6 +11,26 @@ def get_db():
         g.psql_db = db.get_conn_cur('quic_fp')
     return g.psql_db
 
+def format_seen(seen):
+    if seen is None:
+        return '0'
+    seen = int(seen)
+    if seen > 1000000000:
+        if seen < 10000000000:
+            return '%.1fB' % (seen / 1000000000.0)
+        return '%dB' % (seen / 1000000000)
+    elif seen > 1000000:
+        if seen < 10000000:
+            return '%.1fM' % (seen / 1000000.0)
+        return '%dM' % (seen / 1000000)
+    elif seen > 1000:
+        if seen < 10000:
+            return '%.1fK' % (seen / 1000.0)
+        return '%dK' % (seen / 1000)
+    elif seen < 100:
+        return '< 100'
+    else:
+        return seen
 
 @app.route('/')
 def index():
@@ -66,11 +86,31 @@ def top_tls():
             'frac': 100.0*float(seen) / total})
     return top_ids
 
+def top_super():
+    db = get_db()
+    db.cur.execute('''select sum(count) from super_measurements''')
+    rows = db.cur.fetchall()
+    total = int(rows[0][0])
+
+    db.cur.execute('''select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15;''')
+    rows = db.cur.fetchall()
+    top_ids = []
+    for row in rows:
+        nid, seen, rank = row
+        nid = int(nid)
+        top_ids.append({'nid': nid,
+            'id': hid(nid),
+            'count': seen,
+            'rank': rank,
+            'frac': 100.0*float(seen) / total})
+    return top_ids
+
 #@cache.cached(key_prefix="top1", timeout=3*3600)
 @app.route('/top')
 def top_fingerprints():
     top_ids = get_top_quic()
-    return render_template('quic-top.html', top_quic_ids=top_ids, top_tls_ids=top_tls())
+    return render_template('quic-top.html', top_quic_ids=top_ids, top_tls_ids=top_tls(),
+            top_super_ids=top_super())
 
 @app.route('/qid/<qhid>') # hex
 def qid(qhid):
@@ -118,11 +158,32 @@ def tls_fingerprint(tnid):
     db.cur.execute('SELECT count(*) from tls_fingerprints_norm_ext')
     uniq = int(db.cur.fetchall()[0][0])
 
-    db.cur.execute('SELECT sum(count) from tls_measurements_norm_ext')
-    total = int(db.cur.fetchall()[0][0])
+    db.cur.execute('select min(case when id=%s then rank end), sum(case when id=%s then seen end), sum(seen) from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from tls_measurements_norm_ext group by id) as a;', [int(tnid), int(tnid)])
 
+    rank, seen, total = db.cur.fetchall()[0]
 
+    #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
 
+    return render_template('quic-tls-id.html', id=hid(tnid), nid=tnid,
+            seen=int(seen), rank=int(rank), unique=uniq, frac=100*float(seen)/int(total),
+            ch_ver=tls.get_ch_version(),
+            ciphers_str=tls.get_hex_cipher_suite_str(),
+            ciphers=tls.get_ciphers(),
+            comps=tls.get_comp_methods(),
+            ext_str=tls.get_hex_extensions_str(),
+            extensions=tls.get_extensions(),
+            curves_str=tls.get_hex_curves_str(),
+            curves=tls.get_curves(),
+            sigalgs_str=tls.get_hex_sigalgs_str(),
+            sig_algs=tls.get_sig_algs(),
+            pt_fmts=tls.get_pt_fmts(),
+            alpns=tls.get_alpns(),
+            key_share=tls.get_key_share(),
+            psk_key_exchange_modes=tls.get_psk_key_exchange_modes(),
+            version_str=tls.get_hex_supported_versions_str(),
+            supported_version=tls.get_supported_versions(),
+            cert_compression_algs=tls.get_cert_compression_algs(),
+            record_size_limit=tls.get_record_size_limit())
 
 # TODO: 4 kinds of fingerprints:
 # -fpid  (main ID, fingerprint ID) - combination of lower 3
@@ -131,78 +192,75 @@ def tls_fingerprint(tnid):
 # -tpid  QUIC transport parameters - the types/values in the QUIC-specific Client Hello extension
 @app.route('/id/<fid>') # hex
 def fingerprint_hex(fid):
-    fid, = struct.unpack('!q', fid.decode('hex'))
+    fid, = struct.unpack('!q', bytes.fromhex(fid))
     return fingerprint(fid)
 
-'''
 @app.route('/nid/<fid>') # decimal
 def fingerprint(fid):
     db = get_db()
 
-    times = [time.time()]
     # TODO: lookup all 4 fingerprints
-    f = lookup_fingerprint(int(fid))    # 82 ms
+    f = lookup_fingerprints(db, int(fid))
     if f is None:
         return 'Not found'
-    fid_hex = struct.pack('!q', int(fid)).encode('hex')
+    fid_hex = hid(fid)
 
-    times.append(time.time())
-    rank, seen, frac_seen, rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
-    times.append(time.time())
+    rank, seen, frac_seen, total = f.get_rank(db) # sloooow...
+    #rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
 
-    if seen < 100:
+    if seen is None or seen < 100:
         frac_seen = 0.00
     seen = format_seen(seen)
-    seen_wk = format_seen(seen_wk)
+    #seen_wk = format_seen(seen_wk)
 
-    db.cur.execute("SELECT count(*) from fingerprints_norm_ext") # 48 ms
+    db.cur.execute("SELECT count(*) from super_fingerprints") # 48 ms
     rows = db.cur.fetchall()
     uniq = rows[0][0]
 
-    db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week")
-    rows = db.cur.fetchall()
-    uniq_wk = rows[0][0]
+    #db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week")
+    #rows = db.cur.fetchall()
+    #uniq_wk = rows[0][0]
 
-    times.append(time.time())
-    tls_ver = f.get_tls_version()  #
-    times.append(time.time())
-    ch_ver = f.get_ch_version()
-    times.append(time.time())
-    ciphers = f.get_ciphers()
-    times.append(time.time())
-    comps = f.get_comp_methods()
-    times.append(time.time())
-    exts = f.get_extensions()
-    times.append(time.time())
-    alpns = f.get_alpns()
-    times.append(time.time())
-    curves = f.get_curves()
-    times.append(time.time())
-    sig_algs = f.get_sig_algs()
-    times.append(time.time())
+    tls = f.tls
+    quic = f.quic
+    qtp = f.qtp
 
-    return render_template('quic-id.html', id=fid_hex, nid=fid, \
-        seen=seen, rank=rank, unique=uniq, frac=100.0*frac_seen, \
-        quic_version=quic_version, sid_len=sid_len, did_len=did_len, \
-        frames=frames, token_len=token_len, pkt_num=pkt_num, \
-        max_idle_timeout=max_idle_timeout, max_udp_payload_size=max_udp_payload_size, \
-        initial_max_data=initial_max_data, initial_max_stream_data_bidi_local, \
-        initial_max_stream_data_bidi_remote=initial_max_stream_data_bidi_remote, \
-        initial_max_streams_bidi=initial_max_streams_bidi, \
-        initial_max_streams_uni=initial_max_streams_uni, \
-        ack_delay_exponent=ack_delay_exponent, max_ack_delay=max_ack_delay, \
-        disable_active_migration=disable_active_migration, \
-        active_connection_id_limit=active_connection_id_limit, \
-        ch_ver=ch_ver, ciphers=ciphers, \
-        comps=comps, extensions=exts, \
-        alpns=alpns, curves=curves, sig_algs=sig_algs, \
-        pt_fmts=pt_fmts, useragents=useragents, \
-        ciphers_str=ciphers_str, ext_str=ext_str, curves_str=curves_str, version_str=version_str,
-        sigalgs_str=sigalgs_str,
-        key_share=key_share, psk_key_exchange_modes=psk_key_exchange_modes,
-        supported_versions=supported_versions,cert_compression_algs=cert_compression_algs,\
-        record_size_limit=record_size_limit,times=times)
+    return render_template('quic-full-id.html', id=fid_hex, nid=fid,
+        seen=seen, rank=rank, unique=uniq, frac=100.0*frac_seen,
+        quic_fp=hid(quic.nid),
+        quic_version=quic.get_version(), sid_len=quic.sid_len, did_len=quic.did_len,
+        frames=quic.get_frames_str(), token_len=quic.token_len, pkt_num=quic.get_pkt_num(),
+        tls_fp=hid(tls.nid),
+            ch_ver=tls.get_ch_version(),
+            ciphers_str=tls.get_hex_cipher_suite_str(),
+            ciphers=tls.get_ciphers(),
+            comps=tls.get_comp_methods(),
+            ext_str=tls.get_hex_extensions_str(),
+            extensions=tls.get_extensions(),
+            curves_str=tls.get_hex_curves_str(),
+            curves=tls.get_curves(),
+            sigalgs_str=tls.get_hex_sigalgs_str(),
+            sig_algs=tls.get_sig_algs(),
+            pt_fmts=tls.get_pt_fmts(),
+            alpns=tls.get_alpns(),
+            key_share=tls.get_key_share(),
+            psk_key_exchange_modes=tls.get_psk_key_exchange_modes(),
+            version_str=tls.get_hex_supported_versions_str(),
+            supported_version=tls.get_supported_versions(),
+            cert_compression_algs=tls.get_cert_compression_algs(),
+            record_size_limit=tls.get_record_size_limit(),
+        qtp_fp=hid(qtp.nid),
+        max_idle_timeout=qtp.max_idle_timeout,
+        max_udp_payload_size=qtp.max_udp_payload_size,
+        initial_max_data=qtp.initial_max_data,
+        initial_max_stream_data_bidi_local=qtp.initial_max_stream_data_bidi_local,
+        initial_max_stream_data_bidi_remote=qtp.initial_max_stream_data_bidi_remote, \
+        initial_max_stream_data_uni=qtp.initial_max_stream_data_uni, \
+        initial_max_streams_bidi=qtp.initial_max_streams_bidi, \
+        initial_max_streams_uni=qtp.initial_max_streams_uni, \
+        ack_delay_exponent=qtp.ack_delay_exponent, max_ack_delay=qtp.max_ack_delay, \
+        active_connection_id_limit=qtp.active_connection_id_limit)
         #times=times)
+        #disable_active_migration=qtp.disable_active_migration, \
 
-'''
 

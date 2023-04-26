@@ -16,10 +16,11 @@ def tls_ver_to_str(ver):
 def bytea_to_u16s(bya):
     if bya is None:
         return []
-    return [ord(bya[2*a])*256 + ord(bya[2*a+1]) for a in xrange(len(bya)/2)]
+    return [bya[2*a]*256 + bya[2*a+1] for a in range(len(bya)//2)]
 
 def bytea_to_u8s(bya):
-    return [ord(a) for a in bya]
+    return bya
+    #return [ord(a) for a in bya]
 
 def bytea_to_u16_strings(bya, lookup_dict):
     out = []  # dicts of {'n':u16, 's':str}
@@ -65,16 +66,16 @@ def lookup_tls(db, tid):
             key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
 
 # Lookup qTLSFingerprint, QUIC, and TP
-def lookup_fingerprint(db, fid):
+def lookup_fingerprints(db, fid):
     # TODO make this a left join on all 3 tables...
-    db.cur.execute('''SELECT q.*, t.*, tp.* 
-        FROM fps f
+    db.cur.execute('''SELECT q.*, t.*, qtp.* 
+        FROM super_fingerprints f
         LEFT JOIN quic_fingerprints q
-        ON f.qid = q.id
+        ON f.quic_fp = q.id
         LEFT JOIN tls_fingerprints_norm_ext t
-        ON f.tlsid = t.id
-        LEFT JOIN transport_params tp
-        ON f.tpid = tp.id
+        ON f.tls_fp = t.id
+        LEFT JOIN qtp_fingerprints qtp
+        ON f.qtp_fp = qtp.id
         WHERE f.id=%s''', [int(fid)])
     rows = db.cur.fetchall()
     if len(rows) == 0:
@@ -87,15 +88,61 @@ def lookup_fingerprint(db, fid):
     qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len, \
     tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, pt_fmt, sig_algs, alpn, \
     key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit, \
-    tpid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit = rows[0]
+    tpid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, \
+    active_connection_id_limit, qtp_ids = rows[0]
+    #disable_active_migration, 
+
+    disable_active_migration = None     # TODO: do we want this?
 
     tls = qTLSFingerprint(tlsid, ch_ver, cipher_suites, comp_methods, exts, curves, \
             pt_fmt, sig_algs, alpn,\
             key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
     quic = QUICFingerprint(qid, quic_version, client_cid_len, server_cid_len, pkt_num, frames, token_len)
-    tp = TransportParamsFingerprint(tpid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit)
+    tp = TransportParamsFingerprint(tpid, qtp_ids, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit)
 
-    return (quic, tls, tp)
+    return SuperFingerprint(fid, quic, tls, tp)
+
+# The list of alpns (these are a list of strings: ["h2", "http/1.1", ...])
+def parse_alpns(alpn_str):
+    alpns = []
+    if alpn_str is not None and len(alpn_str) > 2:
+        l, = struct.unpack('!H', alpn_str[0:2])
+        idx = 2
+        while idx < l:
+            n = alpn_str[idx]
+            idx += 1
+            alpns.append(repr(alpn_str[idx:idx+n])[2:-1])
+            idx += n
+    return alpns
+
+
+
+class SuperFingerprint(object):
+    def __init__(self, nid, quic, tls, qtp):
+        self.nid = nid
+        self.quic = quic
+        self.tls = tls
+        self.qtp = qtp
+
+    def get_rank(self, db):
+
+        #db.cur.execute('''SELECT id, n, r FROM
+        #    (SELECT id, SUM(count) as n, RANK() OVER(ORDER BY SUM(count) DESC) as r, MAX(t) FROM
+        #    (SELECT id, count, TIMESTAMP WITH TIME ZONE 'epoch' + unixtime * INTERVAL '1 second' as t FROM measurements) as ts
+        #    where age(now(), t) > '2 hour' group by id order by n desc) as j where id=%s''', [int(self.nid)])
+        db.cur.execute('select min(case when id=%s then rank end), sum(case when id=%s then seen end), sum(seen) from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id) as a;', [int(self.nid), int(self.nid)])
+
+        rank, seen, total = db.cur.fetchall()[0]
+
+        frac_seen = 0.0
+        if seen is not None and seen > 0:
+            frac_seen = float(seen) / float(total)
+
+        return (rank, seen, frac_seen, total) # self.rank_week, self.seen_week, self.frac_seen_week)
+
+
+
+
 
 
 class qTLSFingerprint(object):
@@ -105,46 +152,46 @@ class qTLSFingerprint(object):
                 record_size_limit):
         self.nid = int(nid)
         self.ch_version = ch_version
-        self.cipher_suites = cipher_suites
-        self.comp_methods = comp_methods
-        self.extensions = extensions
+        self.cipher_suites = bytes(cipher_suites)
+        self.comp_methods = bytes(comp_methods)
+        self.extensions = bytes(extensions)
 
         # 2-byte length, followed by list of 2-byte Named Groups
-        self.curves = curves
+        self.curves = bytes(curves)
 
         # 1-byte length, followed by list of 1-byte EC Point Formats
-        self.pt_fmts = pt_fmts
+        self.pt_fmts = bytes(pt_fmts)
 
         # 2-byte length, followed by list of 2-byte signature algorithms
-        self.sig_algs = sig_algs
+        self.sig_algs = bytes(sig_algs)
 
         # https://tools.ietf.org/html/rfc7301
         # 2-byte total length
         #   1-byte length, alpn
         #   1-byte length, alpn
         #   ...
-        self.alpn = alpn
+        self.alpn = bytes(alpn)
 
         # https://tools.ietf.org/html/draft-ietf-tls-tls13-28#section-4.2.8
         # List of just pairs of 2-byte named group / 2-byte key length
         # (key omitted)
-        self.key_share = key_share
+        self.key_share = bytes(key_share)
 
         # https://tools.ietf.org/html/draft-ietf-tls-tls13-28#section-4.2.9
         # List of 1-byte PskKeyExchangeModes (no length)
-        self.psk_key_exchange_modes = psk_key_exchange_modes
+        self.psk_key_exchange_modes = bytes(psk_key_exchange_modes)
 
         # https://tools.ietf.org/html/draft-ietf-tls-tls13-28#section-4.2.1
         # List of 2-byte versions (no length)
-        self.supported_versions = supported_versions
+        self.supported_versions = bytes(supported_versions)
 
         # https://tools.ietf.org/html/draft-ietf-tls-certificate-compression-04
         # 1-byte length, followed by list of 2-byte compression methods
-        self.cert_compression_algs = cert_compression_algs
+        self.cert_compression_algs = bytes(cert_compression_algs)
 
         # https://tools.ietf.org/html/draft-ietf-tls-record-limit-03
         # Single 2-byte record limit
-        self.record_size_limit = record_size_limit
+        self.record_size_limit = bytes(record_size_limit)
 
     # String version of client hello version
     def get_ch_version(self):
@@ -211,7 +258,7 @@ class qTLSFingerprint(object):
     def get_cert_compression_algs(self):
         if len(self.cert_compression_algs) == 0:
             return []
-        cca_len, = struct.unpack('!B', self.cert_compression_algs[0])
+        cca_len = self.cert_compression_algs[0]
         if len(self.cert_compression_algs[1:]) != cca_len:
             return [{'s': 'Error (%s)'%self.cert_compression_algs.encode('hex'), 'n':0x0000}]
         return bytea_to_u16_strings(self.cert_compression_algs[1:], cert_compression_algs_dict)
@@ -225,7 +272,7 @@ class qTLSFingerprint(object):
     def get_pt_fmts(self):
         if len(self.pt_fmts) == 0:
             return []
-        pt_len, = struct.unpack('!B', self.pt_fmts[0])
+        pt_len = self.pt_fmts[0]
         if len(self.pt_fmts[1:]) != pt_len:
             return [{'s': 'Error (%s)'%self.pt_fmts.encode('hex'), 'n':0xff}]
         return bytea_to_u8_strings(self.pt_fmts[1:], pt_fmt_dict)
@@ -353,19 +400,53 @@ class QUICFingerprint(object):
             out.append({'n':fid, 's':name})
         return out
 
+class Varint(object):
+    def __init__(self, b=b''):
+        self.b = bytes(b)
+
+    def __int__(self):
+        if len(self.b) == 0:
+            return 0
+        # Get 2 most significant bits
+        msb = self.b[0] >> 6
+        blen = 1 << msb
+
+        # Mask off length bits
+        n = self.b[0] & 0x3f
+        for i in range(1, blen):
+            n = (n << 8) + self.b[i]
+        return n
+
+    def __str__(self):
+        if len(self.b) == 0:
+            return ''
+        return '%d (%s)' % (int(self), self.b.hex())
+
 
 class TransportParamsFingerprint(object):
-    def __init__(self, nid, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit):
+    def __init__(self, nid, param_ids, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit):
         self.nid = nid
-        self.max_udp_payload_size = max_udp_payload_size
-        self.initial_max_data = initial_max_data
-        self.initial_max_stream_data_bidi_local = initial_max_stream_data_bidi_local
-        self.initial_max_stream_data_bidi_remote = initial_max_stream_data_bidi_remote
-        self.initial_max_stream_data_uni = initial_max_stream_data_uni
-        self.initial_max_streams_bidi = initial_max_streams_bidi
-        self.initial_max_streams_uni = initial_max_streams_uni
-        self.ack_delay_exponent = ack_delay_exponent
-        self.max_ack_delay = max_ack_delay
-        self.disable_active_migration = disable_active_migration
-        self.active_connection_id_limit = active_connection_id_limit
+        self.param_ids = param_ids
+        self.max_idle_timeout = Varint(max_idle_timeout)
+        self.max_udp_payload_size = Varint(max_udp_payload_size)
+        self.initial_max_data = Varint(initial_max_data)
+        self.initial_max_stream_data_bidi_local = Varint(initial_max_stream_data_bidi_local)
+        self.initial_max_stream_data_bidi_remote = Varint(initial_max_stream_data_bidi_remote)
+        self.initial_max_stream_data_uni = Varint(initial_max_stream_data_uni)
+        self.initial_max_streams_bidi = Varint(initial_max_streams_bidi)
+        self.initial_max_streams_uni = Varint(initial_max_streams_uni)
+        self.ack_delay_exponent = Varint(ack_delay_exponent)
+        self.max_ack_delay = Varint(max_ack_delay)
+        #self.disable_active_migration = Varint(disable_active_migration)
+        self.active_connection_id_limit = Varint(active_connection_id_limit)
     # TODO: gettrs
+
+    def get_param_ids(self):
+        out = []
+        for pid in self.param_ids:
+            ps = 'UNKNOWN'
+            if pid in quic_transport_param_types:
+                ps = quic_transport_param_types[pid]
+            name = '%s (%d)' % (ps, pid)
+            out.append({'n':pid, 's':name})
+        return out

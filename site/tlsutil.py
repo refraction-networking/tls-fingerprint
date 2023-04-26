@@ -429,6 +429,16 @@ ext_dict = {
   49: "post_handshake_auth",
   50: "signature_algorithms_cert",
   51: "key_share",
+  # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
+  52: "transparency_info",
+  53: "connection_id (deprecated)",
+  54: "connection_id",
+  55: "external_id_hash",
+  56: "external_session_id",
+  57: "quic_transport_parameters",
+  58: "ticket_request",
+  59: "dnssec_chain",
+  60: "sequence_number_encryption_algorithms",
 
   0x001b: "compressed_certificate", # draft
   0x001c: "record_size_limit", # draft
