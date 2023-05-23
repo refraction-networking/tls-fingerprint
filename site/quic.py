@@ -52,7 +52,7 @@ def get_top_quic():
     #    (select id, count, timestamp with time zone 'epoch' + unixtime * INTERVAL '1 second' as t from measurements) as i
     #    where age(now(), t) > '2 hour' group by id order by n desc) as j LIMIT 20;''')
     #db.cur.execute('''select id, seen, rank from mv_ranked_fingerprints_week limit 20''')
-    db.cur.execute('''select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from quic_measurements group by id limit 15''')
+    db.cur.execute('''select * from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from quic_measurements group by id limit 15) as a order by rank''')
     rows = db.cur.fetchall()
     top_ids = []
     for row in rows:
@@ -73,7 +73,7 @@ def top_tls():
     rows = db.cur.fetchall()
     total = rows[0][0]
 
-    db.cur.execute('''select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from tls_measurements_norm_ext group by id limit 15''')
+    db.cur.execute('''select * from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from tls_measurements_norm_ext group by id limit 15) as a order by rank''')
     rows = db.cur.fetchall()
     top_ids = []
     for row in rows:
@@ -92,16 +92,19 @@ def top_super():
     rows = db.cur.fetchall()
     total = int(rows[0][0])
 
-    db.cur.execute('''select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15;''')
+    db.cur.execute('''select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id) as a order by rank''')
     rows = db.cur.fetchall()
     top_ids = []
     for row in rows:
-        nid, seen, rank = row
+        nid, seen, rank, qid, tid, tpid = row
         nid = int(nid)
         top_ids.append({'nid': nid,
             'id': hid(nid),
             'count': seen,
             'rank': rank,
+            'quic_id': hid(qid),
+            'tls_id': hid(tid),
+            'qtp_id': hid(tpid),
             'frac': 100.0*float(seen) / total})
     return top_ids
 
@@ -163,6 +166,8 @@ def tls_fingerprint(tnid):
     rank, seen, total = db.cur.fetchall()[0]
 
     #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
+
+    #db.cur.execute('select a.id, sum(count) as seen from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id group by a.id order by seen desc;')
 
     return render_template('quic-tls-id.html', id=hid(tnid), nid=tnid,
             seen=int(seen), rank=int(rank), unique=uniq, frac=100*float(seen)/int(total),
@@ -259,7 +264,8 @@ def fingerprint(fid):
         initial_max_streams_bidi=qtp.initial_max_streams_bidi, \
         initial_max_streams_uni=qtp.initial_max_streams_uni, \
         ack_delay_exponent=qtp.ack_delay_exponent, max_ack_delay=qtp.max_ack_delay, \
-        active_connection_id_limit=qtp.active_connection_id_limit)
+        active_connection_id_limit=qtp.active_connection_id_limit,\
+        qtp_params=qtp.get_param_ids())
         #times=times)
         #disable_active_migration=qtp.disable_active_migration, \
 
