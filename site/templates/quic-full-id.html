@@ -89,6 +89,11 @@
 
             <tr><td colspan=2><h3>QUIC Transport Parameters ({{ qtp_fp }})</h3></td></tr>
             <tr>
+                <td><b>Parameters</b></td>
+                <td>{% for p in qtp_params %}{{ p.s }}<br/>
+                    {% endfor %}</td>
+            </tr>
+            <tr>
                 <td><b>max_idle_timeout</b></td>
                 <td>{{ max_idle_timeout }}</td>
             </tr>
