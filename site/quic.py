@@ -32,6 +32,10 @@ def format_seen(seen):
     else:
         return seen
 
+def get_total_seen(db):
+    db.cur.execute('select sum(count) from super_measurements')
+    return db.cur.fetchall()[0][0]
+
 @app.route('/')
 def index():
     return render_template('quic.html')
@@ -92,11 +96,12 @@ def top_super():
     rows = db.cur.fetchall()
     total = int(rows[0][0])
 
-    db.cur.execute('''select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id) as a order by rank''')
+    #db.cur.execute('''select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id) as a order by rank''')
+    db.cur.execute('select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp, name from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id left join labels on super_fingerprints.id=labels.id) as a order by rank')
     rows = db.cur.fetchall()
     top_ids = []
     for row in rows:
-        nid, seen, rank, qid, tid, tpid = row
+        nid, seen, rank, qid, tid, tpid, name = row
         nid = int(nid)
         top_ids.append({'nid': nid,
             'id': hid(nid),
@@ -105,15 +110,51 @@ def top_super():
             'quic_id': hid(qid),
             'tls_id': hid(tid),
             'qtp_id': hid(tpid),
+            'name': name if name is not None else '',
             'frac': 100.0*float(seen) / total})
     return top_ids
+
+def top_labels():
+    db = get_db()
+
+    total_super = get_total_seen(db)
+
+    #db.cur.execute('select name, count(distinct labels.id) as uniq_fps, sum(count) as seen from labels left join super_measurements on labels.id=super_measurements.id GROUP by labels.name order by seen desc')
+    #    name     | uniq_fps |  seen
+    #-------------+----------+---------
+    # Chrome 113  |        5 | 7651724
+    # Firefox 113 |       12 |  488298
+
+
+    db.cur.execute('select name, count(distinct id) as uniq_fps, count(distinct quic_fp) as uniq_quic, count(distinct tls_fp) as uniq_tls, count(distinct qtp_fp) as uniq_qtp, sum(seen) as seen from (select labels.id, min(labels.name) as name, min(super_fingerprints.quic_fp) as quic_fp, min(super_fingerprints.tls_fp) as tls_fp, min(super_fingerprints.qtp_fp) as qtp_fp, sum(count) as seen from labels left join super_fingerprints on labels.id=super_fingerprints.id left join super_measurements on labels.id=super_measurements.id group by labels.id) as a group by name order by seen desc;')
+    #     name     | uniq_fps | uniq_quic | uniq_tls | uniq_qtp |  seen
+    # -------------+----------+-----------+----------+----------+---------
+    #  Chrome 113  |        5 |         3 |        2 |        2 | 7625056
+    #  Firefox 113 |       12 |        12 |        2 |        1 |  487517
+
+    top_labels = []
+    rank = 0
+    for row in db.cur.fetchall():
+        rank += 1
+        name, uniq_fps, uniq_quic, uniq_tls, uniq_qtp, seen = row
+        top_labels.append({'rank': rank,
+                           'name': name,
+                           'seen': seen,
+                           'frac': 100*float(seen)/total_super,
+                           'uniq_fps': uniq_fps,
+                           'uniq_quic': uniq_quic,
+                           'uniq_tls': uniq_tls,
+                           'uniq_qtp': uniq_qtp,
+                          })
+    return top_labels
+
 
 #@cache.cached(key_prefix="top1", timeout=3*3600)
 @app.route('/top')
 def top_fingerprints():
     top_ids = get_top_quic()
     return render_template('quic-top.html', top_quic_ids=top_ids, top_tls_ids=top_tls(),
-            top_super_ids=top_super())
+            top_super_ids=top_super(), top_labels=top_labels())
 
 @app.route('/qid/<qhid>') # hex
 def qid(qhid):
@@ -166,8 +207,20 @@ def tls_fingerprint(tnid):
     rank, seen, total = db.cur.fetchall()[0]
 
     #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
+    total_super = get_total_seen(db)
 
-    #db.cur.execute('select a.id, sum(count) as seen from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id group by a.id order by seen desc;')
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id group by a.id order by seen desc;', [int(tnid)])
+    related_fps = []
+    for row in db.cur.fetchall()[:15]:
+        sid, quic_fp, tls_fp, qtp_fp, r_seen = row
+        o = {'id': hid(sid),
+             'quic_fp': hid(quic_fp),
+             'tls_fp': hid(tls_fp),
+             'qtp_fp': hid(qtp_fp),
+             'seen': r_seen,
+             'frac': 100.0*(r_seen / total_super),
+            }
+        related_fps.append(o)
 
     return render_template('quic-tls-id.html', id=hid(tnid), nid=tnid,
             seen=int(seen), rank=int(rank), unique=uniq, frac=100*float(seen)/int(total),
@@ -188,7 +241,8 @@ def tls_fingerprint(tnid):
             version_str=tls.get_hex_supported_versions_str(),
             supported_version=tls.get_supported_versions(),
             cert_compression_algs=tls.get_cert_compression_algs(),
-            record_size_limit=tls.get_record_size_limit())
+            record_size_limit=tls.get_record_size_limit(),
+            related_fps=related_fps)
 
 # TODO: 4 kinds of fingerprints:
 # -fpid  (main ID, fingerprint ID) - combination of lower 3

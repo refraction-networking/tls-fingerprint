@@ -15,6 +15,7 @@
             <th>QUIC</th>
             <th>TLS</th>
             <th>Transport param</th>
+            <th>Label</th>
             <th>Connections</th>
             </tr>
           </thead>
@@ -26,6 +27,7 @@
                 <td><a href="/qid/{{ d.quic_id }}">{{ d.quic_id }}</a></td>
                 <td><a href="/tid/{{ d.tls_id }}">{{ d.tls_id }}</a></td>
                 <td>{{ d.qtp_id}}</td>
+                <td>{{ d.name }}</td>
                 <td>{{'%0.1f'| format(d.frac|float)}}%</td>
               </tr>
             {% endfor %}
@@ -39,9 +41,9 @@
         <table class="table table-condensed table-sm table-striped">
           <thead>
             <tr>
-            <th>Rank</td>
-            <th align="right">Fingerprint</td>
-            <th>Connections</td>
+            <th>Rank</th>
+            <th align="right">Fingerprint</th>
+            <th>Connections</th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +78,34 @@
           </tbody>
         </table>
       </div>
+
+      <h3>Top Labels</h3>
+        <table class="table table-condensed table-sm table-striped">
+          <thead>
+            <tr>
+            <th>Rank</th>
+            <th>Label</th>
+            <th>Unique FPs</th>
+            <th>Unique QUIC</th>
+            <th>Unique TLS</th>
+            <th>Unique QTP</th>
+            <th>Connections</th>
+            </tr>
+        </thead>
+        <tbody>
+           {% for label in top_labels %}
+           <tr>
+             <td>{{ label.rank }}</td>
+             <td>{{ label.name }}</td>
+             <td>{{ label.uniq_fps }}</td>
+             <td>{{ label.uniq_quic }}</td>
+             <td>{{ label.uniq_tls }}</td>
+             <td>{{ label.uniq_qtp }}</td>
+             <td>{{ '%0.1f' | format(label.frac|float) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        </table>
      </div>
     </main>
 {% endblock %}
