@@ -26,7 +26,7 @@
                 <td><a href="/id/{{ d.id }}">{{ d.id }}</a></td>
                 <td><a href="/qid/{{ d.quic_id }}">{{ d.quic_id }}</a></td>
                 <td><a href="/tid/{{ d.tls_id }}">{{ d.tls_id }}</a></td>
-                <td>{{ d.qtp_id}}</td>
+                <td><a href="/qtp/{{ d.qtp_id}}">{{ d.qtp_id }}</a></td>
                 <td>{{ d.name }}</td>
                 <td>{{'%0.1f'| format(d.frac|float)}}%</td>
               </tr>

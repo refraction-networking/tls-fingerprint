@@ -65,6 +65,17 @@ def lookup_tls(db, tid):
             pt_fmt, sig_algs, alpn,\
             key_share, psk_kex_modes, supported_versions, cert_comp_algs, record_size_limit)
 
+def lookup_qtp(db, qtpid):
+    db.cur.execute('SELECT * FROM qtp_fingerprints WHERE id=%s', [int(qtpid)])
+    rows = db.cur.fetchall()
+    if len(rows) == 0:
+        return None
+
+    _, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, active_connection_id_limit, param_ids = rows[0]
+    disable_active_migration = None
+    return TransportParamsFingerprint(qtpid, param_ids, max_idle_timeout, max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote, initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent, max_ack_delay, disable_active_migration, active_connection_id_limit)
+
+
 # Lookup qTLSFingerprint, QUIC, and TP
 def lookup_fingerprints(db, fid):
     # TODO make this a left join on all 3 tables...

@@ -1,0 +1,123 @@
+{% extends "quic-base.html" %}
+
+{% block title %}: id {{ id }}{% endblock %}
+
+{% block content %}
+   <main role="main" class="container">
+      <div class="col-12">
+        <h1><a href="/id/{{ id }}">{{ id }}</a></h1>
+        <table class="table">
+          <tbody>
+            <tr>
+                <td><b>Seen</b> <span class="right-inline"></span></td>
+                <td>{{ seen }} times ({{'%0.2f'| format(frac|float)}}%)</td>
+            </tr>
+            <tr>
+                <td><b>Rank</b> <span class="right-inline"></span></td>
+                <td>{{ rank }} / {{ unique }}</td>
+            </tr>
+
+
+            <h3>QUIC Transport Parameters</h3>
+
+            <tr>
+                <td><b>Parameters</b></td>
+                <td>{% for p in qtp.qtp_params %}{{ p.s }}<br/>
+                    {% endfor %}</td>
+            </tr>
+            <tr>
+                <td><b>max_idle_timeout</b></td>
+                <td>{{ qtp.max_idle_timeout }}</td>
+            </tr>
+            <tr>
+                <td><b>max_udp_payload_size</b></td>
+                <td>{{ qtp.max_udp_payload_size }}</td>
+            </tr>
+            <tr>
+                <td><b>initial_max_data</b></td>
+                <td>{{ qtp.initial_max_data }}</td>
+            </tr>
+            <tr>
+                <td><b>initial_max_stream_data_bidi_local</b></td>
+                <td>{{ qtp.initial_max_stream_data_bidi_local }}</td>
+            </tr>
+            <tr>
+            <td><b>initial_max_stream_data_bidi_remote</b></td>
+                <td>{{ qtp.initial_max_stream_data_bidi_remote }}</td>
+            </tr>
+            <tr>
+                <td><b>initial_max_stream_data_uni</b></td>
+                <td>{{ qtp.initial_max_stream_data_uni }}</td>
+            </tr>
+            <tr>
+                <td><b>initial_max_streams_bidi</b></td>
+                <td>{{ qtp.initial_max_streams_bidi }}</td>
+            </tr>
+            <tr>
+                <td><b>initial_max_streams_uni</b></td>
+                <td>{{ qtp.initial_max_streams_uni }}</td>
+            </tr>
+            <tr>
+                <td><b>ack_delay_exponent</b></td>
+                <td>{{ qtp.ack_delay_exponent }}</td>
+            </tr>
+            <tr>
+                <td><b>max_ack_delay</b></td>
+                <td>{{ qtp.max_ack_delay }}</td>
+            </tr>
+            <tr>
+                <td><b>disable_active_migration</b></td>
+                <td>{{ qtp.disable_active_migration }}</td>
+            </tr>
+
+            <tr><td><b>Related Fingerprints</b></td>
+                <td>
+                    <table>
+                      <thead>
+                        <tr><th>Fingerprint</th>
+                            <th>QUIC</th>
+                            <th>TLS</th>
+                            <th>Transport Param</th>
+                            <th>Label</th>
+                            <th>Connections</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for r in related_fps %}
+                        <tr>
+                                <td><a href="/id/{{ r.id }}">{{ r.id }}</a></td>
+                                <td><a href="/qid/{{ r.quic_fp }}">{{ r.quic_fp }}</a></td>
+                                <td><a href="/tid/{{ r.tls_fp }}">{{ r.tls_fp }}</a></td>
+                                <td><a href="/qtp/{{ r.qtp_fp }}">{{ r.qtp_fp }}</a></td>
+                                <td>{{ r.name }}</td>
+                                <td>{{ '%0.2f'| format(r.frac|float) }}%</td>
+                        </tr>
+                        {% endfor %}
+                     </tbody>
+                   </table>
+               </td>
+            </tr>
+
+            <tr><td>nid</td><td>{{ nid }}</td></tr>
+          </tbody>
+
+        <!--
+        </table>
+        <h3>Times seen (per hour)</h3>
+        <div class="graph" id="graph">
+        <canvas ylabel="Connections / hour" yformat=".2s" width="960" height="500"></canvas>
+        <script src="/idgraph.js/measurements/{{ id }}/graph"></script>
+        </div>
+
+        <h3>Percent seen (24 hour averaged)</h3>
+        <div class="graph" id="norm">
+        <canvas width="960" height="500"></canvas>
+        <script src="/idgraph.js/data/norm/{{ id }}/norm?fill=false"></script>
+        </div>
+
+        -->
+
+      </div>
+    </main>
+
+{% endblock %}

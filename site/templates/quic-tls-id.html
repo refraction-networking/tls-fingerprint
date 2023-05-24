@@ -72,6 +72,7 @@
                             <th>QUIC</th>
                             <th>TLS</th>
                             <th>Transport Param</th>
+                            <th>Label</th>
                             <th>Connections</th>
                         </tr>
                       </thead>
@@ -81,7 +82,8 @@
                                 <td><a href="/id/{{ r.id }}">{{ r.id }}</a></td>
                                 <td><a href="/qid/{{ r.quic_fp }}">{{ r.quic_fp }}</a></td>
                                 <td><a href="/tid/{{ r.tls_fp }}">{{ r.tls_fp }}</a></td>
-                                <td>{{ r.qtp_fp }}</td>
+                                <td><a href="/qtp/{{ r.qtp_fp }}">{{ r.qtp_fp }}</a></td>
+                                <td>{{ r.name }}</td>
                                 <td>{{ '%0.2f'| format(r.frac|float) }}%</td>
                         </tr>
                         {% endfor %}

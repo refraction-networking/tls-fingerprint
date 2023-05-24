@@ -180,10 +180,30 @@ def qfp(qid):
     if tot_seen > 0:
         frac_seen = float(seen)/float(tot_seen)
 
+    total_super = get_total_seen(db)
+
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where quic_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(qid)])
+    related_fps = []
+    for row in db.cur.fetchall()[:15]:
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
+        o = {'id': hid(sid),
+             'quic_fp': hid(quic_fp),
+             'tls_fp': hid(tls_fp),
+             'qtp_fp': hid(qtp_fp),
+             'seen': r_seen,
+             'name': name if name is not None else '',
+             'frac': 100.0*(r_seen / total_super),
+            }
+        related_fps.append(o)
+
+
+
+
     return render_template('quic-id.html', id=qid_hex, nid=qid, \
         seen=seen, rank=rank, unique=uniq, frac=100.0*frac_seen, \
         quic_version=quic.get_version(), sid_len=quic.sid_len, did_len=quic.did_len, \
-        frames=quic.get_frames_str(), token_len=quic.token_len, pkt_num=quic.get_pkt_num())
+        frames=quic.get_frames_str(), token_len=quic.token_len, pkt_num=quic.get_pkt_num(),
+        related_fps=related_fps)
 
 
 @app.route('/tid/<tid>') # hex
@@ -209,15 +229,16 @@ def tls_fingerprint(tnid):
     #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
     total_super = get_total_seen(db)
 
-    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id group by a.id order by seen desc;', [int(tnid)])
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(tnid)])
     related_fps = []
     for row in db.cur.fetchall()[:15]:
-        sid, quic_fp, tls_fp, qtp_fp, r_seen = row
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
         o = {'id': hid(sid),
              'quic_fp': hid(quic_fp),
              'tls_fp': hid(tls_fp),
              'qtp_fp': hid(qtp_fp),
              'seen': r_seen,
+             'name': name if name is not None else '',
              'frac': 100.0*(r_seen / total_super),
             }
         related_fps.append(o)
@@ -239,10 +260,56 @@ def tls_fingerprint(tnid):
             key_share=tls.get_key_share(),
             psk_key_exchange_modes=tls.get_psk_key_exchange_modes(),
             version_str=tls.get_hex_supported_versions_str(),
-            supported_version=tls.get_supported_versions(),
+            supported_versions=tls.get_supported_versions(),
             cert_compression_algs=tls.get_cert_compression_algs(),
             record_size_limit=tls.get_record_size_limit(),
             related_fps=related_fps)
+
+
+@app.route('/qtp/<qid>') # hex
+def qtp_fingerprint_hex(qid):
+    qtpid, = struct.unpack('!q', bytes.fromhex(qid))
+    return qtp_fingerprint(qtpid)
+
+@app.route('/qtpnid/<qtpid>') # decimal
+def qtp_fingerprint(qtpid):
+    db = get_db()
+
+    qtp = lookup_qtp(db, int(qtpid))
+    if qtp is None:
+        return 'Not found'
+
+    db.cur.execute('SELECT count(*) from qtp_fingerprints')
+    uniq = int(db.cur.fetchall()[0][0])
+
+    db.cur.execute('select min(case when id=%s then rank end), sum(case when id=%s then seen end), sum(seen) from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from qtp_measurements group by id) as a;', [int(qtpid), int(qtpid)])
+
+    rank, seen, total = db.cur.fetchall()[0]
+
+    #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
+    total_super = get_total_seen(db)
+
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where qtp_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(qtpid)])
+    related_fps = []
+    for row in db.cur.fetchall()[:15]:
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
+        o = {'id': hid(sid),
+             'quic_fp': hid(quic_fp),
+             'tls_fp': hid(tls_fp),
+             'qtp_fp': hid(qtp_fp),
+             'seen': r_seen,
+             'name': name if name is not None else '',
+             'frac': 100.0*(r_seen / total_super),
+            }
+        related_fps.append(o)
+
+    return render_template('quic-qtp-id.html', id=hid(qtpid), nid=qtpid,
+            seen=int(seen), rank=int(rank), unique=uniq, frac=100*float(seen)/int(total),
+            qtp=qtp,
+            related_fps=related_fps)
+ 
+
+ 
 
 # TODO: 4 kinds of fingerprints:
 # -fpid  (main ID, fingerprint ID) - combination of lower 3
@@ -305,7 +372,7 @@ def fingerprint(fid):
             key_share=tls.get_key_share(),
             psk_key_exchange_modes=tls.get_psk_key_exchange_modes(),
             version_str=tls.get_hex_supported_versions_str(),
-            supported_version=tls.get_supported_versions(),
+            supported_versions=tls.get_supported_versions(),
             cert_compression_algs=tls.get_cert_compression_algs(),
             record_size_limit=tls.get_record_size_limit(),
         qtp_fp=hid(qtp.nid),

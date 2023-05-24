@@ -87,7 +87,7 @@
 
             <tr><td><b>Record Size Limit</b></td><td>{% if record_size_limit is not none %}{{ record_size_limit }}{% endif %}</td></tr>
 
-            <tr><td colspan=2><h3>QUIC Transport Parameters ({{ qtp_fp }})</h3></td></tr>
+            <tr><td colspan=2><h3>QUIC Transport Parameters (<a href="/qtp/{{ qtp_fp }}">{{ qtp_fp }}</a>)</h3></td></tr>
             <tr>
                 <td><b>Parameters</b></td>
                 <td>{% for p in qtp_params %}{{ p.s }}<br/>

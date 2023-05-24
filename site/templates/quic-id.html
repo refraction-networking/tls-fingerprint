@@ -42,6 +42,36 @@
                 <td><b>Packet Number</b></td>
                 <td>{{ pkt_num }}</td>
             </tr>
+
+            <tr>
+                <td><b>Related Fingerprints</b></td>
+                <td>
+                    <table class="table">
+                        <thead>
+                         <tr>
+                         <th>Fingerprint</th>
+                         <th>QUIC</th>
+                         <th>TLS</th>
+                         <th>Transport Param</th>
+                         <th>Label</th>
+                         <th>Connections</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in related_fps %}
+                        <tr>
+                                <td><a href="/id/{{ r.id }}">{{ r.id }}</a></td>
+                                <td><a href="/qid/{{ r.quic_fp }}">{{ r.quic_fp }}</a></td>
+                                <td><a href="/tid/{{ r.tls_fp }}">{{ r.tls_fp }}</a></td>
+                                <td><a href="/qtp/{{ r.qtp_fp }}">{{ r.qtp_fp }}</a></td>
+                                <td>{{ r.name }}</td>
+                                <td>{{ '%0.2f'| format(r.frac|float) }}%</td>
+                        </tr>
+                        {% endfor %}
+                     </tbody>
+                   </table>
+                </td>
+            </tr>
           </tbody>
         </table>
         <!--
