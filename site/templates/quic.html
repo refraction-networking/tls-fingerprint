@@ -14,9 +14,14 @@
 	<p>This page demonstrates our preliminary work in collecting and analyzing QUIC fingerprints</p>
 
         <div id="your-browser" class="alert alert-primary" style="display: none">
-        Your browser generates the fingerprint <a id="fp-url" href="#"></a><span id="fp-cluster-span" style="display: none"> (from <a href="#" id="fp-cluster-url">Cluster #<span id="fp-cluster"></span></a>)</span>,
-        which is seen in <b><span id="fp-pct"></span>%</b> of connections, making it ranked <b>#<span id="fp-rank"></span></b>
-        by popularity.
+        Your browser generates the fingerprint <a id="fp-url" href="#"></a>,
+        with sub-fingerprints from QUIC Header <span id="quic-hdr"></span>, QUIC ClientHello <span id="quic-ch"></span>(Normalize to <span id="quic-ch-norm"></span>), 
+        and QUIC Transport Parameters <span id="quic-tp"></span>.
+        </div>
+
+        <div id="your-browser-no-quic" class="alert alert-danger" style="display: none">
+        Your browser did not provide a QUIC initial packet for us to analyze. An error may have occurred on our end or your browser/network condition 
+        does not support QUIC. 
         </div>
 
 	<h3>QUIC fingerprints</h3>
@@ -112,6 +117,6 @@
 	-->
      </div>
     </main>
-<script src="/static/fingerprint.js"></script>
+<script src="/static/quic_fingerprint.js"></script>
 
 {% endblock %}
