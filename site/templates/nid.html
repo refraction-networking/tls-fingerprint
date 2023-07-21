@@ -61,11 +61,6 @@
             <tr><td><b>Record Size Limit</b></td><td>{% if record_size_limit is not none %}{{ record_size_limit }}{% endif %}</td></tr>
 
             <tr><td>nid</td><td>{{ nid }}</td></tr>
-            {% if cluster_seen is not none %}
-            <tr><td>Cluster</td>
-                    <td><a href="/cluster/{{ id }}">Cluster #{{ cluster_rank }}</a><br/>
-                            <b>{{ cluster_fps }}</b> fingerprints, comprising <b>{{ '%.1f' % cluster_pct }}%</b> of connections</td></tr>
-            {% endif %}
             <tr><td title="Fingerprints normalizing to this one">Observed Real-world Fingerprints</td>
                 <td>{% for fp in related %}
                     <a href="/id/{{ fp.id }}">{{ fp.id }}</a><br/>

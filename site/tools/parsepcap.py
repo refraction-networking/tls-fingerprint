@@ -7,7 +7,7 @@ import binascii
 import hashlib
 import struct
 import sys
-#import traceback
+import traceback
 
 PRINT_SQL = False
 
@@ -23,10 +23,13 @@ def ungrease(x):
 
 # Could use struct.parse, but meh. want arbitrary length arrays of base-256 data
 def aint(arr):
+    # arr could be of type int instead of array
+    if isinstance(arr, int):
+        return arr
     s = 0
     for a in arr:
         s *= 256
-        s += ord(a)
+        s += a
     return s
 
 # convert lists of u16 to list of u8s
@@ -41,7 +44,8 @@ fprints = {}
 #convenience function for generating fingerprint
 def update_arr(h, arr):
     h.update(struct.pack('>L', len(arr)))
-    h.update(''.join([chr(a) for a in arr]))
+    # put arr into a byte array
+    h.update(bytearray(arr))
 
 class Fingerprint:
     def __init__(self, tls_version, ch_version, cipher_suites, comp_methods, extensions,
@@ -77,7 +81,7 @@ class Fingerprint:
                dbs(self.key_share), dbs(self.psk_key_exchange_modes), dbs(self.supported_versions), dbs(self.cert_compression_algs),
                dbs(self.record_size_limit)))
 
-    def norm_ext(exts):
+    def norm_ext(self, exts):
         exts_u16 = list_u8_to_u16(exts)
         exts_u16.sort()
         return list_u16_to_u8(exts_u16)
@@ -85,15 +89,18 @@ class Fingerprint:
     @staticmethod
     def from_tls_data(tls):
         if len(tls) == 0:
+            print('Empty tls')
             return None
-        if tls[0] != '\x16':
+        if tls[0] != 0x16:
             # Not a handshake
+            print('Not a handshake')
             return None
         tls_version = aint(tls[1:3])
         tls_len = aint(tls[3:5])
         hs_type = tls[5]
-        if hs_type != '\x01':
+        if hs_type != 0x01:
             # not a client hello
+            print('Not a client hello')
             return None
 
         # Parse client hello
@@ -113,7 +120,7 @@ class Fingerprint:
         cs_len = aint(tls[off:off + 2])
         off += 2
         x = tls[off:off + cs_len]
-        cipher_suites = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) / 2)]))
+        cipher_suites = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) // 2)]))
         off += cs_len
 
         # Compression
@@ -157,7 +164,7 @@ class Fingerprint:
                 # len...
 
                 x = tls[off:off + ext_len]
-                curves = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) / 2)]))
+                curves = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) // 2)]))
             elif ext_type == 0x000b:
                 # ec_point_fmt
                 pt_fmt_len = aint(tls[off])
@@ -194,14 +201,12 @@ class Fingerprint:
             elif ext_type == 0x002b:
                 # supported_versions
                 x = tls[off+1:off+ext_len]   # skip length
-                supported_versions = list_u16_to_u8(ungrease([aint(x[2*i:2*i+2]) for i in range(len(x)/2)]))
+                supported_versions = list_u16_to_u8(ungrease([aint(x[2*i:2*i+2]) for i in range(len(x)//2)]))
             elif ext_type == 0x001b:
                 # compressed_cert
                 cert_comp_algs = [aint(x) for x in tls[off:off+ext_len]]
             elif ext_type == 0x001c:
                 record_size_limit = [aint(x) for x in tls[off:off+ext_len]]
-
- 
 
             off += ext_len
 
@@ -351,7 +356,7 @@ def parse_pcap(pcap_fname):
 
         except Exception as e:
             print('Error in pkt %d: %s' % (n, e))
-            #print traceback.print_exc(file=sys.stdout)
+            traceback.print_exc(file=sys.stdout)
 
     return ret
 
@@ -386,7 +391,7 @@ def main():
 
     print('----')
     for fp, num in sorted(uniq.items(), key=lambda x: x[1], reverse=True):
-        print('%d %s %d'  % (fp, struct.pack('!q', fp).encode('hex'), num))
+        print('%d %s %d'  % (fp, struct.pack('!q', fp).hex(), num))
 
 
 if __name__ == "__main__":

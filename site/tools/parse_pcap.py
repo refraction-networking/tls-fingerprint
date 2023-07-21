@@ -213,7 +213,7 @@ def parse_pcap(pcap_fname):
 	ret = []
 	p = pcap.pcap(pcap_fname)
 	for ts, pkt in p:
-		try:
+		# try:
 			n += 1
 			try:
 				eth = dpkt.ethernet.Ethernet(pkt)
@@ -242,8 +242,8 @@ def parse_pcap(pcap_fname):
 				if PRINT_SQL:
 					fingerprint.print_sql()
 
-		except Exception as e:
-			print 'Error in pkt %d: %s' % (n, e)
+		# except Exception as e:
+		# 	print 'Error in pkt %d: %s' % (n, e)
 
 	return ret
 

@@ -23,8 +23,10 @@ def allowed_file(filename):
     return '.' in filename and \
             filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def hid(nid):
-    return struct.pack('!q', nid).encode('hex')
+def hid(nid: int):
+    # return struct.pack('!q', nid).hex()
+    # rewrite for python3
+    return struct.pack('!q', nid).hex()
 
 def tls_ver_to_str(ver):
     d = {
@@ -42,7 +44,7 @@ def tls_ver_to_str(ver):
 def bytea_to_u16s(bya):
     if bya is None:
         return []
-    return [ord(bya[2*a])*256 + ord(bya[2*a+1]) for a in range(len(bya)/2)]
+    return [bya[2*a]*256 + bya[2*a+1] for a in range(len(bya)//2)]
 
 def bytea_to_u8s(bya):
     return [ord(a) for a in bya]
@@ -59,13 +61,17 @@ def bytea_to_u16_strings(bya, lookup_dict):
 
 def bytea_to_u8_strings(bya, lookup_dict):
     out = [] # dicts of {'n':u8, 's':str}
-    for u8 in bytea_to_u8s(bya):
+    for u8 in bya:
         name = ''
         if u8 in lookup_dict:
             name = lookup_dict[u8]
         name += ' (0x%02x)' % (u8)
         out.append({'n':u8, 's':name})
     return out
+
+def hex_to_int64(h):
+    u = int(h, 16)
+    return (u & ((1 << 63) - 1)) - (u & (1 << 63))
 
 import utls_support
 
@@ -119,10 +125,19 @@ def parse_alpns(alpn_str):
         l, = struct.unpack('!H', alpn_str[0:2])
         idx = 2
         while idx < l:
-            n, = struct.unpack('!B', alpn_str[idx])
+            # n, = struct.unpack('!B', alpn_str[idx]) #py2
+            alpn_len = alpn_str[idx]
             idx += 1
-            alpns.append(repr(alpn_str[idx:idx+n])[1:-1])
-            idx += n
+
+            alpn = alpn_str[idx:idx+alpn_len]
+            
+            decoded = ''
+            try:
+                alpns.append(alpn.decode('utf-8'))
+            except:
+                alpns.append(alpn.hex())
+
+            idx += alpn_len
     return alpns
 
 def get_top_fps():
@@ -148,6 +163,43 @@ def get_top_fps():
                                 'frac': 100.0*float(seen) / total,
                                 'labels': get_labels_for_fp(nid),
                                 'cluster': cluster})
+            return top_ids
+
+def get_total_seen_norm_ext_week():
+    global db_conn_pool
+    with db_conn_pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('''select sum(seen) from public.mv_ranked_fingerprints_norm_ext_week''')
+            row = cur.fetchone()
+            if row is None or row[0] is None:
+                return 1
+            return int(row[0])
+
+def get_top_norm_fps():
+    global db_conn_pool
+    with db_conn_pool.connection() as conn:
+        with conn.cursor() as cur:
+            # Get total...
+            total = get_total_seen_norm_ext_week()
+
+            #db.cur.execute('''select id, n, r from
+            #    (select id, sum(count) as n, rank() over(order by sum(count) desc) as r, max(t) from
+            #    (select id, count, timestamp with time zone 'epoch' + unixtime * INTERVAL '1 second' as t from measurements) as i
+            #    where age(now(), t) > '2 hour' group by id order by n desc) as j LIMIT 20;''')
+            #db.cur.execute('''select id, seen, rank from mv_ranked_fingerprints_week limit 20''')
+            cur.execute('''select id, seen, rank from mv_ranked_fingerprints_norm_ext_week 
+                            order by seen desc limit 20;''')
+            rows = cur.fetchall()
+            top_ids = []
+            for row in rows:
+                nid, seen, rank = row
+                nid = int(nid)
+                top_ids.append({'nid': nid,
+                                'id': hid(nid),
+                                'count': seen,
+                                'rank': rank,
+                                'frac': 100.0*float(seen) / total,
+                                'labels': get_labels_for_fp(nid)})
             return top_ids
 
 def levenshtein(s1, s2):
@@ -214,7 +266,7 @@ class TLSFingerprint(object):
     # usually just [{'s':"null (0x00)", 'n':0x00}]
     def get_compression_methods(self):
         comps = []
-        for comp in bytea_to_u8s(self.compression_methods):
+        for comp in self.compression_methods:
             comp_obj = {}
             if comp == 0:   comp_obj['s'] = 'null'
             elif comp == 1: comp_obj['s'] = 'DEFLATE'
@@ -245,7 +297,7 @@ class TLSFingerprint(object):
             return []
         curve_len, = struct.unpack('!H', self.supported_groups[0:2])
         if len(self.supported_groups[2:]) != curve_len:
-            return [{'s': 'Error (%s)'%self.supported_groups.encode('hex'), 'n':0xffff}]
+            return [{'s': 'Error (%s)'%self.supported_groups.hex(), 'n':0xffff}]
         return bytea_to_u16_strings(self.supported_groups[2:], curve_dict)
 
     def set_supported_groups(self, supported_groups):
@@ -255,9 +307,9 @@ class TLSFingerprint(object):
     def get_ec_point_formats(self):
         if len(self.ec_point_formats) == 0:
             return []
-        pt_len, = struct.unpack('!B', self.ec_point_formats[0])
+        pt_len = self.ec_point_formats[0]
         if len(self.ec_point_formats[1:]) != pt_len:
-            return [{'s': 'Error (%s)'%self.ec_point_formats.encode('hex'), 'n':0xff}]
+            return [{'s': 'Error (%s)'%self.ec_point_formats.hex(), 'n':0xff}]
         return bytea_to_u8_strings(self.ec_point_formats[1:], pt_fmt_dict)
     
     def set_ec_point_formats(self, ec_point_formats):
@@ -314,9 +366,9 @@ class TLSFingerprint(object):
     def get_compress_certificate(self):
         if len(self.compress_certificate) == 0:
             return []
-        cca_len, = struct.unpack('!B', self.compress_certificate[0])
+        cca_len = self.compress_certificate[0]
         if len(self.compress_certificate[1:]) != cca_len:
-            return [{'s': 'Error (%s)'%self.compress_certificate.encode('hex'), 'n':0x0000}]
+            return [{'s': 'Error (%s)'%self.compress_certificate.hex(), 'n':0x0000}]
         return bytea_to_u16_strings(self.compress_certificate[1:], cert_compression_algs_dict)
 
     def set_compress_certificate(self, compress_certificate):
@@ -404,7 +456,7 @@ class TLSFingerprint(object):
         return levenshtein(bytea_to_u16s(self.extensions), bytea_to_u16s(other.extensions)) + \
         levenshtein(bytea_to_u16s(self.cipher_suites), bytea_to_u16s(other.cipher_suites)) + \
         levenshtein(bytea_to_u16s(self.supported_groups), bytea_to_u16s(other.supported_groups)) + \
-        levenshtein(bytea_to_u8s(self.compression_methods), bytea_to_u8s(other.compression_methods)) + \
+        levenshtein(self.compression_methods, other.compression_methods) + \
         levenshtein(self.get_alpn(), other.get_alpn()) + \
         levenshtein(self.get_signature_algorithms(), other.get_signature_algorithms())
 
@@ -431,7 +483,7 @@ class TLSFingerprint(object):
                     
                 rows = cur.fetchall()
                 for row in rows:
-                    related.append({'id':   struct.pack('!q', row[0]).encode('hex')})
+                    related.append({'id':   struct.pack('!q', row[0]).hex()})
                 return related
 
     def get_labels(self):
@@ -465,7 +517,7 @@ def lookup_fingerprint(fid: int):
             row = cur.fetchone()
             if row is None:
                 return None
-            #fid_hex = struct.pack('!q', int(fid)).encode('hex')
+            #fid_hex = struct.pack('!q', int(fid)).hex()
 
             _, tls_record_version, tls_handshake_version, cipher_suites, compression_methods, extensions, \
             supported_groups, ec_point_formats, signature_algorithms, alpn, \
@@ -495,7 +547,7 @@ def lookup_fingerprint_norm(fid):
             row = cur.fetchone()
             if row is None:
                 return None
-            #fid_hex = struct.pack('!q', int(fid)).encode('hex')
+            #fid_hex = struct.pack('!q', int(fid)).hex()
 
             _, tls_record_version, tls_handshake_version, cipher_suites, compression_methods, extensions, \
             supported_groups, ec_point_formats, signature_algorithms, alpn, \
@@ -564,16 +616,18 @@ def stackgraph(path, divid):
     return render_template('stackgraph.js', divid=divid, path='/'+path)
 
 def compare_generic(hid1, hid2, template="compare.html"):
-    fid1, = struct.unpack('!q', hid1.decode('hex'))
-    fid2, = struct.unpack('!q', hid2.decode('hex'))
+    # fid1, = struct.unpack('!q', hid1.decode('hex')) # python 2.x
+    # fid2, = struct.unpack('!q', hid2.decode('hex')) # python 2.x
+    fid1 = hex_to_int64(hid1)
+    fid2 = hex_to_int64(hid2)
 
     fp1 = lookup_fingerprint(fid1)
     fp2 = lookup_fingerprint(fid2)
 
     if fp1 is None:
-        return 'Not found: %s' % (struct.pack('!q', fid1).encode('hex'))
+        return 'Not found: %s' % (struct.pack('!q', fid1).hex())
     if fp2 is None:
-        return 'Not found: %s' % (struct.pack('!q', fid2).encode('hex'))
+        return 'Not found: %s' % (struct.pack('!q', fid2).hex())
 
     ciphers_diff = get_sn_diff(fp1.get_cipher_suites(), fp2.get_cipher_suites())
     comps_diff   = get_sn_diff(fp1.get_compression_methods(), fp2.get_compression_methods())
@@ -742,8 +796,9 @@ def find_generic_helper(tbl, bytea, id_n=None, page=0, exact=False):
 @app.route('/cluster.json/id/<hex_id>')
 def cluster_json(hex_id):
     global db_conn_pool
-    nid, = struct.unpack('!q', hex_id.decode('hex'))
-    
+    # nid, = struct.unpack('!q', hex_id.decode('hex'))
+    nid = hex_to_int64(hex_id)
+
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
             # Get all the edges
@@ -964,7 +1019,8 @@ def crandom2():
 
 @app.route('/cluster/<hid>')
 def cluster(hid):
-    nid, = struct.unpack('!q', hid.decode('hex'))
+    # nid, = struct.unpack('!q', hid.decode('hex'))
+    nid = hex_to_int64(hid)
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
@@ -1040,7 +1096,8 @@ def clusters():
 
 @app.route('/close/<hid>')
 def close_ids(hid):
-    nid, = struct.unpack('!q', hid.decode('hex'))
+    # nid, = struct.unpack('!q', hid.decode('hex'))
+    nid = hex_to_int64(hid)
     
     global db_conn_pool
     with db_conn_pool.connection() as conn:
@@ -1089,7 +1146,7 @@ def close_ids(hid):
                 #c_fp = lookup_fingerprint(c_id)
 
                 #d = fp.get_lev_dist(c_fp)
-                diffs.append({'lev':lev_dist, 'id':struct.pack('!q', c_id).encode('hex')})
+                diffs.append({'lev':lev_dist, 'id':struct.pack('!q', c_id).hex()})
 
             diffs = sorted(diffs, key=lambda x: x['lev'])
             return render_template('close.html', diffs=diffs, id=hid)
@@ -1102,7 +1159,8 @@ def smooth_data(data, win=24):
 
 @app.route('/measurements/<hid>')
 def measurements_hex(hid):
-    nid, = struct.unpack('!q', hid.decode('hex'))
+    # nid, = struct.unpack('!q', hid.decode('hex'))
+    nid = hex_to_int64(hid)
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
@@ -1114,7 +1172,8 @@ def measurements_hex(hid):
 
 @app.route('/data/norm/<hid>')
 def norm_measurements_hex(hid):
-    nid, = struct.unpack('!q', hid.decode('hex'))
+    # nid, = struct.unpack('!q', hid.decode('hex'))
+    nid = hex_to_int64(hid)
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
@@ -1484,10 +1543,10 @@ def signature_algorithms():
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('''SELECT signature_algorithms, count(*) as fps, sum(seen) as seen
+            cur.execute('''SELECT sig_algs, count(*) as fps, sum(seen) as seen
                     FROM mv_ranked_fingerprints_week
                     LEFT JOIN fingerprints ON mv_ranked_fingerprints_week.id=fingerprints.id
-                    GROUP BY signature_algorithms ORDER BY seen DESC;''')
+                    GROUP BY sig_algs ORDER BY seen DESC;''')
 
             totals = {} # {sig_alg} => (fps, seen)
 
@@ -1499,7 +1558,6 @@ def signature_algorithms():
                 already_counted = set()
 
                 for sa in parse_sig_algs(signature_algorithms):
-
                     # Don't double count
                     if sa['n'] in already_counted:
                         continue
@@ -1523,7 +1581,7 @@ def signature_algorithms():
                 key=lambda x: x['seen'], reverse=True)
 
 
-            return render_template('sig-algs.html', signature_algorithms=out, tot_fps=float(tot_fps), tot_seen=float(tot_seen))
+            return render_template('sig-algs.html', sig_algs=out, tot_fps=float(tot_fps), tot_seen=float(tot_seen))
 
 def format_seen(seen):
     if seen > 1000000000:
@@ -1561,15 +1619,25 @@ def get_fp_stats():
             if normid is None:
                 return Response(status=400)
             # hex to int
-            normid, = struct.unpack('!q', normid.decode('hex'))
-            fp_stat = api.get_fp_stat(int(normid))
+            # normid, = struct.unpack('!q', normid.decode('hex')) # python 2.x
+            normid = hex_to_int64(normid)
+            
+            print("get_fp_stats: ", normid)
+
+            fp_stat = api.get_fp_stat(cur, int(normid))
             if fp_stat is None:
                 return Response(status=404)
             id, seen, rank, cluster, cluster_fps, cluster_seen = fp_stat
+
+            cur.execute('''select sum(seen) from mv_ranked_fingerprints_week''')
+            row = cur.fetchone()
+            total_seen = 1.0
+            if row is not None and row[0] is not None:
+                total_seen = row[0]
             fp_stat_dict = {
                 'seen': int(seen),
                 'rank': int(rank),
-                'frac_seen': float(seen) / int(total)
+                'frac_seen': float(seen) / int(total_seen)
             }
             return jsonify(fp_stat_dict)
 
@@ -1587,8 +1655,10 @@ def add_user_agent():
                 return Response(status=400)
 
             # hex to int
-            id, = struct.unpack('!q', id.decode('hex'))
-            normid, = struct.unpack('!q', normid.decode('hex'))
+            # id, = struct.unpack('!q', id.decode('hex'))
+            # normid, = struct.unpack('!q', normid.decode('hex'))
+            id = hex_to_int64(id)
+            normid = hex_to_int64(normid)
             api.record_useragent(conn, id, normid, ua)
             return Response(status=204)
     else:
@@ -1596,7 +1666,8 @@ def add_user_agent():
 
 @app.route('/id/<fid>') # hex
 def fingerprint_hex(fid):
-    fid, = struct.unpack('!q', fid.decode('hex'))
+    # fid, = struct.unpack('!q', fid.decode('hex'))
+    fid = hex_to_int64(fid)
     return fingerprint(fid)
 
 @app.route('/nid/<fid>') # decimal
@@ -1608,7 +1679,7 @@ def fingerprint(fid):
             f = lookup_fingerprint(int(fid))    # 82 ms
             if f is None:
                 return 'Not found'
-            fid_hex = struct.pack('!q', int(fid)).encode('hex')
+            fid_hex = struct.pack('!q', int(fid)).hex()
 
             times.append(time.time())
             rank, seen, frac_seen, rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
@@ -1629,6 +1700,8 @@ def fingerprint(fid):
 
             times.append(time.time())
             normid = f.get_norm_id()
+            # convert to hex
+            normid = struct.pack('!q', normid).hex()
             times.append(time.time())
             tls_ver = f.get_tls_record_version()  #
             times.append(time.time())
@@ -1679,7 +1752,7 @@ def fingerprint(fid):
             # if cluster_seen != None:
             #     cluster_pct = 100*float(cluster_seen)/get_total_seen_week()
         
-            return render_template('nid.html', id=fid_hex, normid=normid, 
+            return render_template('id.html', id=fid_hex, normid=normid, 
                             seen=seen, frac=100.0*frac_seen, 
                             seen_wk=seen_wk, frac_wk=100.0*frac_seen_wk, 
                             rank=rank, unique=uniq, 
@@ -1707,7 +1780,8 @@ def fingerprint(fid):
 
 @app.route('/id/N/<fid>') # hex
 def fingerprint_norm_hex(fid):
-    fid, = struct.unpack('!q', fid.decode('hex'))
+    # fid, = struct.unpack('!q', fid.decode('hex')) # python 2.x
+    fid = hex_to_int64(fid)
     return fingerprint_norm(fid)
 
 @app.route('/nid/N/<fid>') # decimal
@@ -1720,7 +1794,7 @@ def fingerprint_norm(fid):
             f = lookup_fingerprint_norm(int(fid))    # 82 ms
             if f is None:
                 return 'Not found'
-            fid_hex = struct.pack('!q', int(fid)).encode('hex')
+            fid_hex = struct.pack('!q', int(fid)).hex()
 
             times.append(time.time())
             rank, seen, frac_seen, rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
@@ -1732,12 +1806,12 @@ def fingerprint_norm(fid):
             seen_wk = format_seen(seen_wk)
 
             # count unique normalized fingerprints
-            db.cur.execute("SELECT count(*) from fingerprints_norm_ext") # 48 ms
-            rows = db.cur.fetchall()
+            cur.execute("SELECT count(*) from fingerprints_norm_ext") # 48 ms
+            rows = cur.fetchall()
             uniq = rows[0][0]
 
-            db.cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week") # TODO: optimize
-            rows = db.cur.fetchall()
+            cur.execute("SELECT count(*) from mv_ranked_fingerprints_norm_ext_week") # TODO: optimize
+            rows = cur.fetchall()
             uniq_wk = rows[0][0]
 
             times.append(time.time())
@@ -1827,7 +1901,7 @@ def session_tickets():
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute('''select sum(seen), (select sum(seen) from mv_ranked_fingerprints_norm_ext_week) from
-                        fingerprints_norm_ext left join mv_ranked_fingerprints_norm_ext_week on fingerprints_norm_ext.id=mv_ranked_fingerprints_norm_ext_week.id where position('\\x0023' in extensions)%2=1;''')
+                        fingerprints_norm_ext left join mv_ranked_fingerprints_norm_ext_week on fingerprints_norm_ext.id=mv_ranked_fingerprints_norm_ext_week.id where position('\\x0023' in normalized_extensions)%2=1;''')
             seen, tot_seen = cur.fetchall()[0]
             pct_tickets = 100*float(seen)/float(tot_seen)
 
@@ -1844,9 +1918,11 @@ def get_generic_top(column_name, thing_dict, top_n=None, thing_iter=bytea_to_u16
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('''select fingerprints.id, fingerprints.%s, mv_ranked_fingerprints_week.seen
+            query = '''select fingerprints.id, fingerprints.''' + column_name + ''', mv_ranked_fingerprints_week.seen
                             from mv_ranked_fingerprints_week left join fingerprints on mv_ranked_fingerprints_week.id=fingerprints.id
-                            where seen > 10 order by seen desc;''', (column_name,))
+                            where seen > 10 order by seen desc;'''
+
+            cur.execute(query)
 
             things = {}
             tot_seen = 0
@@ -1994,6 +2070,14 @@ def top_fingerprints():
     top_ids = get_top_fps()
     return render_template('top-fingerprints.html', top_ids=top_ids)
 
+@app.route('/top/N/fingerprints')
+#@cache.cached(key_prefix="top1", timeout=3*3600)
+def top_norm_fingerprints():
+    top_norm_ids = get_top_norm_fps()
+    top_ciphers = []
+
+    return render_template('top-norm-fingerprints.html', top_ids=top_norm_ids, top_ciphers=top_ciphers)
+
 # add top normalized fps
 @app.route('/top/groups')
 def groups():
@@ -2023,10 +2107,11 @@ def top():
     top_ciphers = get_top_ciphers()[:5]
     # get_generic_top('cipher_suites', cipher_dict, top_n=5)
     top_ids = get_top_fps()[:5]
+    top_norm_ids = get_top_norm_fps()[:5]
     total_cluster_fps, total_cluster_pct_seen, clusters = cluster_summary()
 
     return render_template('top-summary.html', top_versions=top_versions,
-            top_exts=top_exts, top_groups=top_groups, top_ids=top_ids,
+            top_exts=top_exts, top_groups=top_groups, top_ids=top_ids, top_norm_ids=top_norm_ids,
             top_ciphers=top_ciphers, clusters=clusters[:5])
 
 
@@ -2047,8 +2132,8 @@ def alpn():
             LIMIT_ROWS = 20
 
             cur.execute('''select count(*), coalesce(sum(seen), 0), alpn
-                            from mv_ranked_fingerprints left join fingerprints
-                            on fingerprints.id=mv_ranked_fingerprints.id
+                            from mv_ranked_fingerprints_norm_ext left join fingerprints_norm_ext
+                            on fingerprints_norm_ext.id=mv_ranked_fingerprints_norm_ext.id
                             group by alpn order by coalesce(sum(seen),0) desc;''')
 
             client_alpns = []
@@ -2056,12 +2141,12 @@ def alpn():
 
             n = 0
 
-            for row in db.cur.fetchall():
+            for row in cur.fetchall():
                 num_fps, seen, alpn, = row
                 try:
                     alpn_list = parse_alpns(alpn)
                 except IndexError:
-                    print('Error parsing alpn: %s' % (''.join(['%02x' % ord(c) for c in alpn])))
+                    print('Error parsing alpn: %s' % (''.join(['%02x' % c for c in alpn])))
                     continue
 
                 for alpn in alpn_list:
@@ -2090,16 +2175,16 @@ def alpn():
                         'frac_seen': float(n[1])/total_seen}
                 pop_alpns.append(obj)
 
-            db.cur.execute('''select count(*), sum(count) from smeasurements''')
-            total_fps, total_seen, = db.cur.fetchall()[0]
+            cur.execute('''select count(*), sum(count) from smeasurements''')
+            total_fps, total_seen, = cur.fetchall()[0]
 
-            db.cur.execute('''select count(*), sum(count), alpn
+            cur.execute('''select count(*), sum(count), alpn
                     from sfingerprints left join smeasurements
                     on sfingerprints.id=smeasurements.sid
                     group by alpn order by sum(count) desc''')
 
             selected_alpns = []
-            for row in db.cur.fetchall():
+            for row in cur.fetchall():
                 num_fps, seen, alpn, = row
                 alpn_list = parse_alpns(alpn)    # Should just return one
 
@@ -2140,7 +2225,11 @@ def upload_file():
             results = parsepcap.parse_pcap(fullpath)
             out = []
             for n, sni, fid in results:
-                out.append({'n': n, 'sni': sni, 'hid': struct.pack('!q', fid).encode('hex')})
+                out.append({'n': n, 'sni': sni, 'hid': struct.pack('!q', fid).hex()})
+            
+            # remove file
+            os.remove(fullpath)
+
             return render_template('pcap-results.html', results=out)
     return render_template('pcap.html')
 
