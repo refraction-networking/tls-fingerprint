@@ -67,7 +67,7 @@ class Fingerprint:
         self.sni = sni
 
     def print_sql(self):
-        print "  INSERT INTO fingerprints (id, record_tls_version, ch_tls_version, cipher_suites,\
+        print("  INSERT INTO fingerprints (id, record_tls_version, ch_tls_version, cipher_suites,\
                     compression_methods, extensions, named_groups, ec_point_fmt, sig_algs, alpn,\
                     key_share, psk_key_exchange_modes, supported_versions, cert_compression_algs,\
                     record_size_limit) VALUES (%d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');" % \
@@ -75,7 +75,7 @@ class Fingerprint:
                dbs(self.extensions),
                dbs(self.elliptic_curves), dbs(self.ec_point_fmt), dbs(self.sig_algs), dbs(self.alpn),
                dbs(self.key_share), dbs(self.psk_key_exchange_modes), dbs(self.supported_versions), dbs(self.cert_compression_algs),
-               dbs(self.record_size_limit))
+               dbs(self.record_size_limit)))
 
     def norm_ext(exts):
         exts_u16 = list_u8_to_u16(exts)
@@ -113,7 +113,7 @@ class Fingerprint:
         cs_len = aint(tls[off:off + 2])
         off += 2
         x = tls[off:off + cs_len]
-        cipher_suites = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in xrange(len(x) / 2)]))
+        cipher_suites = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) / 2)]))
         off += cs_len
 
         # Compression
@@ -157,7 +157,7 @@ class Fingerprint:
                 # len...
 
                 x = tls[off:off + ext_len]
-                curves = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in xrange(len(x) / 2)]))
+                curves = list_u16_to_u8(ungrease([aint(x[2 * i:2 * i + 2]) for i in range(len(x) / 2)]))
             elif ext_type == 0x000b:
                 # ec_point_fmt
                 pt_fmt_len = aint(tls[off])
@@ -194,7 +194,7 @@ class Fingerprint:
             elif ext_type == 0x002b:
                 # supported_versions
                 x = tls[off+1:off+ext_len]   # skip length
-                supported_versions = list_u16_to_u8(ungrease([aint(x[2*i:2*i+2]) for i in xrange(len(x)/2)]))
+                supported_versions = list_u16_to_u8(ungrease([aint(x[2*i:2*i+2]) for i in range(len(x)/2)]))
             elif ext_type == 0x001b:
                 # compressed_cert
                 cert_comp_algs = [aint(x) for x in tls[off:off+ext_len]]
@@ -304,7 +304,7 @@ def add_fingerprint(fingerprint):
     if fingerprint.id not in fprints:
         fprints[fingerprint.id] = []
     # b = '%s_%s_%s' % (browser, version, os)
-    print '%s: %s' % (fingerprint.sni_host, fingerprint.id)
+    print('%s: %s' % (fingerprint.sni_host, fingerprint.id))
     return
 
     b = sni_host.split('.')[0]
@@ -350,7 +350,7 @@ def parse_pcap(pcap_fname):
                     fingerprint.print_sql()
 
         except Exception as e:
-            print 'Error in pkt %d: %s' % (n, e)
+            print('Error in pkt %d: %s' % (n, e))
             #print traceback.print_exc(file=sys.stdout)
 
     return ret
@@ -361,7 +361,7 @@ def parse_hex(hexfile_name):
         hex_str = f.read()
         bin_str = binascii.unhexlify(hex_str)
         fingerprint = Fingerprint.from_tls_data(bin_str)
-        print '%s: %d' % (fingerprint.sni, fingerprint.get_fingerprint())
+        print('%s: %d' % (fingerprint.sni, fingerprint.get_fingerprint()))
         if PRINT_SQL:
             fingerprint.print_sql()
 
@@ -379,14 +379,14 @@ def main():
     fps = parse_pcap(args.input_file)
     uniq = {}
     for pkt_n, sni, fp in fps:
-        print '#%d %s: %d' % (pkt_n, sni, fp)
+        print('#%d %s: %d' % (pkt_n, sni, fp))
         if fp not in uniq:
             uniq[fp] = 0
         uniq[fp] += 1
 
-    print '----'
+    print('----')
     for fp, num in sorted(uniq.items(), key=lambda x: x[1], reverse=True):
-        print '%d %s %d'  % (fp, struct.pack('!q', fp).encode('hex'), num)
+        print('%d %s %d'  % (fp, struct.pack('!q', fp).encode('hex'), num))
 
 
 if __name__ == "__main__":

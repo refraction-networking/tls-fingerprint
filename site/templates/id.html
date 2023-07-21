@@ -8,14 +8,16 @@
         <h1><a href="/id/{{ id }}">{{ id }}</a></h1>
         <table class="table">
           <tbody>
-            <tr><td><b>Seen</b> <span class="right-inline">(all time)<br/>
+            <tr><td><b>Seen</b><sup>†</sup> <span class="right-inline">(all time)<br/>
                                       (past week)</td>
                     <td>{{ seen }} times ({{'%0.2f'| format(frac|float)}}%)<br/>
                         {{ seen_wk }} times ({{'%0.2f'| format(frac_wk|float)}}%)</td></tr>
-            <tr><td><b>Rank</b> <span class="right-inline">(all time)<br/>
+            <tr><td><b>Rank</b><sup>†</sup> <span class="right-inline">(all time)<br/>
                                 (past week)</td>
                     <td>{{ rank }} / {{ unique }}<br/>
                         {{ rank_wk }} / {{ unique_wk }}</td></tr>
+            
+            <tr><td><b>Normalized Form</b></td><td><a href="/id/N/{{ normid }}">N/{{ normid }}</a></td></tr>
 
             <tr><td><b>TLS Version</b></td><td>{{ tls_ver }}</td></tr>
 
@@ -32,12 +34,12 @@
                 <br/>{% endfor %}</td></tr>
             <tr><td><b>Supported Groups</b><br/>
                     <a class="small" href="/match/group/{{ curves_str }}">exact match</a></td>
-                <td>{% for c in curves %}<a href="/find/group/{{ '%04x'%c.n }}">{{ c.s }}</a>
+                <td>{% for c in supported_groups %}<a href="/find/group/{{ '%04x'%c.n }}">{{ c.s }}</a>
                 <br/>{% endfor %}</td></tr>
             <tr><td><b>Signature Algorithms</b><br/>
                     <a class="small" href="/match/sigalg/{{ sigalgs_str }}">exact match</a></td>
-                <td>{% for sa in sig_algs %}{{ sa }}<br/>{% endfor %}</td></tr>
-            <tr><td><b>EC Point Formats</b></td><td>{% for c in pt_fmts %}{{ c.s }}<br/>{% endfor %}</td></tr>
+                <td>{% for sa in signature_algorithms %}{{ sa }}<br/>{% endfor %}</td></tr>
+            <tr><td><b>EC Point Formats</b></td><td>{% for c in ec_point_formats %}{{ c.s }}<br/>{% endfor %}</td></tr>
             <tr><td><b>ALPN</b></td><td>{% for a in alpns %}{{ a }}<br/>{% endfor %}</td></tr>
             <tr><td><b>Key Share</b></td>
                 <td>{% for k in key_share %}{{ k.s }} - {{ k.key_len}}-byte key
@@ -66,27 +68,29 @@
                     <td><a href="/cluster/{{ id }}">Cluster #{{ cluster_rank }}</a><br/>
                             <b>{{ cluster_fps }}</b> fingerprints, comprising <b>{{ '%.1f' % cluster_pct }}%</b> of connections</td></tr>
             {% endif %}
-            <tr><td>Related</td>
-                <td>{% for fp in related %}
-                        <a href="/id/{{ fp.id }}">{{ fp.id }}</a> (<a href="/compare/{{ id }}/{{ fp.id }}">compare</a>) Seen {{ fp.seen }} times ({{ '%0.2f'|format(fp.frac|float) }}%) <!-- {{ fp.lev }} -->
-    {% if fp.labels|length > 0 %}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;({{ fp.labels[0].name }}){% endif %}
-    <br/>
-{% endfor %}</td></tr>
+            <tr><td>Related<sup>‡</sup></td>
+                <td>
+                    {% for fp in related %}
+                        <a href="/id/{{ fp.id }}">{{ fp.id }}</a> (<a href="/compare/{{ id }}/{{ fp.id }}">compare</a>)<br/>
+                    {% endfor %}
+                </td>
+            </tr>
             <tr><td>Labels</td>
                 <td>{% for l in labels %}
                     <a href="/label/{{ l.lid }}">{{ l.name }}</a><br/>
                 {% endfor %}</td></tr>
          <tr><td><a href="https://github.com/refraction-networking/utls">uTLS</a> generated code</td>
            <td width="80%">
-  <a class="btn btn-primary" data-toggle="collapse" href="#utlsCode" role="button" aria-expanded="false" aria-controls="utlsCode">Click to expand</a>
+  <a class="btn btn-secondary" data-toggle="collapse" href="#utlsCode" role="button" aria-expanded="false" aria-controls="utlsCode">Re-Work In Progress</a>
 <div class="collapse" id="utlsCode"><div class="card card-body">
-<pre><code class="go">{{ utls_code_prefix }}
-{{ utls_code_body|safe }}
-{{ utls_code_suffix }}</code></pre></div></div>
+<pre><code class="go">
+    // deprecated, to be replaced with JSON Parrot Description
+</code></pre></div></div>
            </td></tr>
           </tbody>
         </table>
-        <h3>Times seen (per hour)</h3>
+        
+        <!-- <h3>Times seen (per hour)</h3>
         <div class="graph" id="graph">
         <canvas ylabel="Connections / hour" yformat=".2s" width="960" height="500"></canvas>
         <script src="/idgraph.js/measurements/{{ id }}/graph"></script>
@@ -96,7 +100,7 @@
         <div class="graph" id="norm">
         <canvas width="960" height="500"></canvas>
         <script src="/idgraph.js/data/norm/{{ id }}/norm?fill=false"></script>
-        </div>
+        </div> -->
 
         <table class="table">
          <tbody>
@@ -104,7 +108,10 @@
             <td>{% for ua in useragents %}{{ua}}<br/>{% endfor %}</td></tr>
          </tbody>
         </table>
-
+        <footer>
+            <p>†: Seen and Rank data are calculated based on the normalized form, since we stopped counting every single fingerprint since Chrome started shuffling the TLS extension orders.  <br>
+            ‡: Related fingerprints are the observed TLS fingerprints sharing the same normalized fingerprint ID with this one.</p>
+        </footer>
       </div>
     </main>
 

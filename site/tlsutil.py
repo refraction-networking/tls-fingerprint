@@ -434,6 +434,7 @@ ext_dict = {
   0x001c: "record_size_limit", # draft
 
   0x0a0a: "GREASE",
+  0x4469: "application_settings",
   0x5500: "LEGACY_token_binding",    # https://community.qualys.com/thread/15849
   0x754f: "LEGACY_ChannelID",
   35655:  "LEGACY_padding",          # https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/NSS_3.15.5_release_notes
