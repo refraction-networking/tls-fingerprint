@@ -1826,22 +1826,19 @@ def session_tickets():
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('''select sum(seen), (select sum(seen) from mv_ranked_fingerprints_week) from
-                        fingerprints left join mv_ranked_fingerprints_week on fingerprints.id=mv_ranked_fingerprints_week.id where position('\\x0023' in extensions)%2=1;''')
+            cur.execute('''select sum(seen), (select sum(seen) from mv_ranked_fingerprints_norm_ext_week) from
+                        fingerprints_norm_ext left join mv_ranked_fingerprints_norm_ext_week on fingerprints_norm_ext.id=mv_ranked_fingerprints_norm_ext_week.id where position('\\x0023' in extensions)%2=1;''')
             seen, tot_seen = cur.fetchall()[0]
             pct_tickets = 100*float(seen)/float(tot_seen)
 
-            cur.execute('''select size, round((100*cast(sum(count) as decimal) / (select sum(count) from ticket_sizes)), 2) as c from ticket_sizes group by size order by c desc;''')
+            cur.execute('''select size, round((100*cast(sum(count) as decimal) / (select sum(count) from ticket_sizes_norm_ext)), 2) as c from ticket_sizes_norm_ext group by size order by c desc LIMIT 1000;''')
 
             data = []
-            i = 1
-            for row in cur.fetchall():
+            for i, row in enumerate(cur.fetchall()):
                 size, pct_conns = row
-                data.append({'rank': i, 'size': size, 'pct_conns': pct_conns})
-                i += 1
+                data.append({'rank': i+1, 'size': size, 'pct_conns': pct_conns})
 
             return render_template('tickets.html', data=data, pct_tickets=pct_tickets)
-
 
 def get_generic_top(column_name, thing_dict, top_n=None, thing_iter=bytea_to_u16s):
     global db_conn_pool
