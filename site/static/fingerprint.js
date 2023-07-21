@@ -1,5 +1,5 @@
 $(function() {
-    $.get('https://client.tlsfingerprint.io.gauk.as/', function (data) {
+    $.get('https://client.'+location.hostname+'/', function (data) {
         url = '/id/' + data.id;
         norm_url = '/id/N/' + data.norm_id;
 
