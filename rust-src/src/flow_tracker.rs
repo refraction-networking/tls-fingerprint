@@ -401,12 +401,12 @@ impl FlowTracker {
                     count
                 )
                 VALUES ($1, $2, $3)
-                ON CONFLICT ON CONSTRAINT ticket_sizes_pkey DO UPDATE
-                SET count = ticket_sizes.count + $4;"
+                ON CONFLICT ON CONSTRAINT ticket_sizes_norm_ext_pkey DO UPDATE
+                SET count = ticket_sizes_norm_ext.count + $4;"
             ) {
                 Ok(stmt) => stmt,
                 Err(e) => {
-                    println!("Preparing insert_ticket_size failed: {}", e);
+                    println!("Preparing insert_ticket_size_norm_ext failed: {}", e);
                     return;
                 }
             };

@@ -1,5 +1,5 @@
 
-CFLAGS += -I/home/ewust/postgresql-9.5.10/src/include/
+CFLAGS += -I/usr/include/postgresql/10/server
 #bump this for each new make install, or psql will crash and delete your data...
 VERSION=1.1
 
