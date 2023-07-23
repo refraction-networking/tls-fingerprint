@@ -99,6 +99,13 @@ pub fn u8_to_u16_be(first_byte: u8, second_byte: u8) -> u16 {
     (first_byte as u16) << 8 | (second_byte as u16)
 }
 
+pub fn u16_to_u8_be(double: u16) -> Vec<u8> {
+    let mut res = Vec::new();
+    res.push((double >> 8) as u8);
+    res.push((double & 0x00ff) as u8);
+    res
+}
+
 pub fn u8_to_u32_be(first_byte: u8, second_byte: u8, third_byte: u8, forth_byte: u8) -> u32 {
     (first_byte as u32) << 24 | (second_byte as u32) << 16 | (third_byte as u32) << 8 |
         (forth_byte as u32)
@@ -114,6 +121,14 @@ pub fn vec_u8_to_vec_u16_be(a: &Vec<u8>) -> Vec<u16> {
     let mut result = Vec::with_capacity(a.len() / 2);
     for i in 0..result.capacity() {
         result.push(u8_to_u16_be(a[2 * i], a[2 * i + 1]));
+    }
+    result
+}
+
+pub fn vec_u16_to_vec_u8_be(a: &Vec<u16>) -> Vec<u8> {
+    let mut result = Vec::with_capacity(a.len() * 2);
+    for i in a {
+        result.append(&mut u16_to_u8_be(*i));
     }
     result
 }
