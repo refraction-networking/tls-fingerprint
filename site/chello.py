@@ -9,6 +9,8 @@ from tools import parsepcap, db, api
 import os
 import pickle
 import math
+import utls_support
+
 
 # const
 UPLOAD_FOLDER = '/tmp/'
@@ -72,8 +74,6 @@ def bytea_to_u8_strings(bya, lookup_dict):
 def hex_to_int64(h):
     u = int(h, 16)
     return (u & ((1 << 63) - 1)) - (u & (1 << 63))
-
-import utls_support
 
 #@cache.cached(key_prefix="total_seen13", timeout=3*3600)
 def get_total_seen():
@@ -726,7 +726,7 @@ def find_generic_helper(tbl, bytea, id_n=None, page=0, exact=False):
                     'cipher':      (cipher_dict, 'cipher_suites'),
                     'group':       (curve_dict, 'named_groups'),
                     'supported_version':     (versions_dict, 'supported_versions'),
-                    'sigalg':      (None, 'signature_algorithms'),
+                    'sigalg':      (None, 'sig_algs'),
                     }
             if tbl not in obj_d:
                 return 'Bad table name'
@@ -1119,10 +1119,10 @@ def close_ids(hid):
                             u16_lev((select extensions from fingerprints where id=%s), extensions) +
                             u16_lev((select named_groups from fingerprints where id=%s), named_groups) +
                             u8_lev((select compression_methods from fingerprints where id=%s), compression_methods) +
-                            u16_lev_skiphdr((select signature_algorithms from fingerprints where id=%s),        signature_algorithms, fps, seen = row
-                            if len(signature_algorithms) < 2:
+                            u16_lev_skiphdr((select sig_algs from fingerprints where id=%s),        sig_algs, fps, seen = row
+                            if len(sig_algs) < 2:
                             continue
-                            signature_algorithms) +
+                            sig_algs) +
                             abs((select record_tls_version from fingerprints where id=%s) - record_tls_version) +
                             abs((select ch_tls_version from fingerprints where id=%s) - ch_tls_version)
                     as lev from mv_ranked_fingerprints left join fingerprints on mv_ranked_fingerprints.id=fingerprints.id order by lev) as q where lev < 10''', \
@@ -1133,7 +1133,7 @@ def close_ids(hid):
                             u16_lev((select extensions from fingerprints where id=3400840294346873990), extensions) +
                             u16_lev((select named_groups from fingerprints where id=3400840294346873990), named_groups) +
                             u8_lev((select compression_methods from fingerprints where id=3400840294346873990), compression_methods) +
-                            u16_lev_skiphdr((select signature_algorithms from fingerprints where id=3400840294346873990), signature_algorithms) +
+                            u16_lev_skiphdr((select sig_algs from fingerprints where id=3400840294346873990), sig_algs) +
                             abs((select record_tls_version from fingerprints where id=3400840294346873990) - record_tls_version) +
                             abs((select ch_tls_version from fingerprints where id=3400840294346873990) - ch_tls_version)
                     as lev from mv_ranked_fingerprints left join fingerprints on mv_ranked_fingerprints.id=fingerprints.id order by lev, seen desc;'''
@@ -1539,7 +1539,7 @@ def weak_ciphers():
                 fallback_num=fallback_num, fallback_seen=fallback_seen)
 
 @app.route('/sig-algs')
-def signature_algorithms():
+def sig_algs():
     global db_conn_pool
     with db_conn_pool.connection() as conn:
         with conn.cursor() as cur:
@@ -1553,11 +1553,11 @@ def signature_algorithms():
             tot_fps = 0
             tot_seen = 0
             for row in cur.fetchall():
-                signature_algorithms, fps, seen = row
+                sig_algs, fps, seen = row
 
                 already_counted = set()
 
-                for sa in parse_sig_algs(signature_algorithms):
+                for sa in parse_sig_algs(sig_algs):
                     # Don't double count
                     if sa['n'] in already_counted:
                         continue
