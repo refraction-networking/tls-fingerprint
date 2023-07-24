@@ -9,8 +9,6 @@ from tools import parsepcap, db, api
 import os
 import pickle
 import math
-import utls_support
-
 
 # const
 UPLOAD_FOLDER = '/tmp/'
