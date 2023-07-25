@@ -1,4 +1,5 @@
 import psycopg
+import psycopg2.extensions
 import time
 # Authors: Gaukas <Gaukas.Wang@colorado.edu>
 
@@ -7,7 +8,7 @@ import time
 # return: (id, seen, rank, cluster_rank, cluster_fps, cluster_seen) or None if not found
 #
 # this function should be called with the db lock held if exists
-def get_fp_stat(pgcursor: psycopg.Cursor, norm_fp_id: int):
+def get_fp_stat(pgcursor: psycopg.Cursor|psycopg2.extensions.cursor, norm_fp_id: int):
     pgcursor.execute('''SELECT id, seen, rank, q.cluster_rank, fps, cluster_seen
                         FROM mv_ranked_fingerprints_norm_ext_week
                         LEFT JOIN cluster_edges ON mv_ranked_fingerprints_norm_ext_week.id=cluster_edges.source
@@ -25,7 +26,7 @@ def get_fp_stat(pgcursor: psycopg.Cursor, norm_fp_id: int):
                     ''', [norm_fp_id])
     return pgcursor.fetchone()
 
-def record_useragent(pgconn: psycopg.Connection, nid: int, normid: int, ua: str):
+def record_useragent(pgconn: psycopg.Connection|psycopg2.extensions.connection, nid: int, normid: int, ua: str):
     with pgconn.cursor() as pgcursor:
         try:
             pgcursor.execute("SELECT * FROM fingerprints WHERE id=%s", [nid])

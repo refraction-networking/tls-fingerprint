@@ -17,7 +17,8 @@ ALLOWED_EXTENSIONS = set(['pcap', 'pcapng'])
 # var
 application = app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-db_conn_pool = db.get_pool()
+# db_conn_pool = db.get_pool()
+db_conn_pool = db.get_fake_pool() # for testing
 
 def allowed_file(filename):
     return '.' in filename and \
