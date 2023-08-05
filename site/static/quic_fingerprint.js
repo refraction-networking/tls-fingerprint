@@ -12,13 +12,18 @@ function recursiveRequest(retry) {
             qtpid = data.quic_transport_parameters.tpfpid;
             cipid = data.cip_fp_id;
 
-            url = '/qid/' + cipid;
-            $('#fp-url').attr('href', url);
-            $('#fp-url').text(cipid);
-            $('#quic-hdr').text(hdrid);
-            $('#quic-ch').text(chid);
-            $('#quic-ch-norm').text(chnormid);
-            $('#quic-tp').text(qtpid);
+            url = '/id/' + cipid;
+            $('#id').attr('href', url);
+            $('#id').text(cipid);
+            hdrurl = '/qid/' + hdrid;
+            $('#qid').attr('href', hdrurl);
+            $('#qid').text(hdrid);
+            turl = '/tid/' + chnormid;
+            $('#tid').attr('href', turl);
+            $('#tid').text(chnormid);
+            qtpurl = '/qtp/' + qtpid;
+            $('#qtp').attr('href', qtpurl);
+            $('#qtp').text(qtpid);
             $('#your-browser').show();
         }
         else {
