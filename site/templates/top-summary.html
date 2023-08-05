@@ -29,6 +29,27 @@
         </table>
       </div>
       <div class="col-5">
+        <h3 class="right"><a href="/top/N/fingerprints">Top Normalized Fingerprints</a></h3>
+        <table class="table table-condensed table-sm table-striped">
+          <thead>
+            <tr>
+            <th>Rank</td>
+            <th align="right">N/Fingerprint</td>
+            <th>Connections</td>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in top_norm_ids %}
+              <tr>
+                <td>{{ d.rank }}</td>
+                <td align="right"><a href="/id/N/{{ d.id }}">{{ d.id }}</a></td>
+                <td>{{'%0.1f'| format(d.frac|float)}}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="col-5">
         <h3 class="right"><a href="/top/extensions">Top Extensions</a></h3>
         <table class="table table-condensed table-sm table-striped">
           <thead>
