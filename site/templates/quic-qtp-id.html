@@ -22,7 +22,7 @@
 
             <tr>
                 <td><b>Parameters</b></td>
-                <td>{% for p in qtp.qtp_params %}{{ p.s }}<br/>
+                <td>{% for p in qtp.get_param_ids() %}{{ p.s }}<br/>
                     {% endfor %}</td>
             </tr>
             <tr>

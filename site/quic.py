@@ -3,6 +3,8 @@ from psycopg2 import sql
 from prod import db
 from tlsutil import *
 from fprints import *
+import diff
+
 
 app = Flask(__name__)
 
@@ -97,12 +99,15 @@ def top_super():
     total = int(rows[0][0])
 
     #db.cur.execute('''select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id) as a order by rank''')
-    db.cur.execute('select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp, name from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id left join labels on super_fingerprints.id=labels.id) as a order by rank')
+    db.cur.execute('select * from (select a.id, seen, rank, quic_fp, tls_fp, qtp_fp, name, observed from (select id, sum(count) as seen, rank() over(order by sum(count) desc) as rank from super_measurements group by id limit 15) as a left join super_fingerprints on a.id=super_fingerprints.id left join labels_inferred on super_fingerprints.id=labels_inferred.id) as a order by rank')
     rows = db.cur.fetchall()
     top_ids = []
     for row in rows:
-        nid, seen, rank, qid, tid, tpid, name = row
+        nid, seen, rank, qid, tid, tpid, name, observed = row
         nid = int(nid)
+        lbl = ''
+        if name is not None:
+            lbl = name if observed else 'Likely %s' % name
         top_ids.append({'nid': nid,
             'id': hid(nid),
             'count': seen,
@@ -110,7 +115,7 @@ def top_super():
             'quic_id': hid(qid),
             'tls_id': hid(tid),
             'qtp_id': hid(tpid),
-            'name': name if name is not None else '',
+            'name': lbl,
             'frac': 100.0*float(seen) / total})
     return top_ids
 
@@ -126,19 +131,25 @@ def top_labels():
     # Firefox 113 |       12 |  488298
 
 
-    db.cur.execute('select name, count(distinct id) as uniq_fps, count(distinct quic_fp) as uniq_quic, count(distinct tls_fp) as uniq_tls, count(distinct qtp_fp) as uniq_qtp, sum(seen) as seen from (select labels.id, min(labels.name) as name, min(super_fingerprints.quic_fp) as quic_fp, min(super_fingerprints.tls_fp) as tls_fp, min(super_fingerprints.qtp_fp) as qtp_fp, sum(count) as seen from labels left join super_fingerprints on labels.id=super_fingerprints.id left join super_measurements on labels.id=super_measurements.id group by labels.id) as a group by name order by seen desc;')
-    #     name     | uniq_fps | uniq_quic | uniq_tls | uniq_qtp |  seen
-    # -------------+----------+-----------+----------+----------+---------
-    #  Chrome 113  |        5 |         3 |        2 |        2 | 7625056
-    #  Firefox 113 |       12 |        12 |        2 |        1 |  487517
+    db.cur.execute('select name, sum(observed) as observ, count(distinct id) as uniq_fps, count(distinct quic_fp) as uniq_qui, count(distinct tls_fp) as uniq_tls, count(distinct qtp_fp) as uniq_qtp, sum(seen) as seen from (select labels_inferred.id, min(labels_inferred.name) as name, bool_and(labels_inferred.observed)::int as observed, min(super_fingerprints.quic_fp) as quic_fp, min(super_fingerprints.tls_fp) as tls_fp, min(super_fingerprints.qtp_fp) as qtp_fp, sum(count) as seen from labels_inferred left join super_fingerprints on labels_inferred.id=super_fingerprints.id left join super_measurements on labels_inferred.id=super_measurements.id group by labels_inferred.id) as a group by name order by seen desc;')
+    #       name      | observ | uniq_fps | uniq_qui | uniq_tls | uniq_qtp |   seen   
+    # ----------------+--------+----------+----------+----------+----------+----------
+    # Chrome 113     |      5 |      787 |      232 |        2 |       32 | 10481866
+    # Safari 16.5    |      2 |      138 |       32 |        2 |       12 |  6942895
+    # Firefox 113    |     12 |      676 |      227 |        2 |        3 |  1205447
+    # Edge 113       |      3 |      112 |       81 |        2 |        2 |   658429
+    # quic-go 0.32.0 |      5 |       12 |       12 |        1 |        1 |       26
+    # quic-go 0.34.0 |      5 |        9 |        9 |        1 |        1 |       19
+
 
     top_labels = []
     rank = 0
     for row in db.cur.fetchall():
         rank += 1
-        name, uniq_fps, uniq_quic, uniq_tls, uniq_qtp, seen = row
+        name, observed, uniq_fps, uniq_quic, uniq_tls, uniq_qtp, seen = row
         top_labels.append({'rank': rank,
                            'name': name,
+                           'observed': observed,
                            'seen': seen,
                            'frac': 100*float(seen)/total_super,
                            'uniq_fps': uniq_fps,
@@ -146,6 +157,24 @@ def top_labels():
                            'uniq_tls': uniq_tls,
                            'uniq_qtp': uniq_qtp,
                           })
+
+
+
+    db.cur.execute('select name, sum(observed) as observ, count(distinct id) as uniq_fps, count(distinct quic_fp) as uniq_qui, count(distinct tls_fp) as uniq_tls, count(distinct qtp_fp) as uniq_qtp, sum(seen) as seen from (select labels_inferred.id, min(labels_inferred.name) as name, bool_and(labels_inferred.observed)::int as observed, min(super_fingerprints.quic_fp) as quic_fp, min(super_fingerprints.tls_fp) as tls_fp, min(super_fingerprints.qtp_fp) as qtp_fp, sum(count) as seen from labels_inferred left join super_fingerprints on labels_inferred.id=super_fingerprints.id left join super_measurements on labels_inferred.id=super_measurements.id where observed group by labels_inferred.id) as a group by name order by seen desc;')
+    for row in db.cur.fetchall():
+        rank += 1
+        name, observed, uniq_fps, uniq_quic, uniq_tls, uniq_qtp, seen = row
+        top_labels.append({'rank': rank,
+                           'name': 'Observed ' + name,
+                           'observed': observed,
+                           'seen': seen,
+                           'frac': 100*float(seen)/total_super,
+                           'uniq_fps': uniq_fps,
+                           'uniq_quic': uniq_quic,
+                           'uniq_tls': uniq_tls,
+                           'uniq_qtp': uniq_qtp,
+                          })
+
     return top_labels
 
 
@@ -182,16 +211,19 @@ def qfp(qid):
 
     total_super = get_total_seen(db)
 
-    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where quic_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(qid)])
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels_inferred.name), bool_and(labels_inferred.observed) from (select * from super_fingerprints where quic_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels_inferred on a.id=labels_inferred.id group by a.id order by seen desc;', [int(qid)])
     related_fps = []
     for row in db.cur.fetchall()[:15]:
-        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name, observed = row
+        lbl = ''
+        if name is not None:
+            lbl = name if observed else 'Likely %s' % name
         o = {'id': hid(sid),
              'quic_fp': hid(quic_fp),
              'tls_fp': hid(tls_fp),
              'qtp_fp': hid(qtp_fp),
              'seen': r_seen,
-             'name': name if name is not None else '',
+             'name': lbl,
              'frac': 100.0*(r_seen / total_super),
             }
         related_fps.append(o)
@@ -213,6 +245,7 @@ def tls_fingerprint_hex(tid):
 
 @app.route('/tnid/<tnid>') # decimal
 def tls_fingerprint(tnid):
+    tnid = int(tnid)
     db = get_db()
 
     tls = lookup_tls(db, int(tnid))
@@ -229,16 +262,21 @@ def tls_fingerprint(tnid):
     #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
     total_super = get_total_seen(db)
 
-    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(tnid)])
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels_inferred.name), bool_and(labels_inferred.observed) from (select * from super_fingerprints where tls_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels_inferred on a.id=labels_inferred.id group by a.id order by seen desc;', [int(tnid)])
     related_fps = []
     for row in db.cur.fetchall()[:15]:
-        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name, observed = row
+        if r_seen is None:
+            r_seen = 0
+        lbl = ''
+        if name is not None:
+            lbl = name if observed else 'Likely %s' % name
         o = {'id': hid(sid),
              'quic_fp': hid(quic_fp),
              'tls_fp': hid(tls_fp),
              'qtp_fp': hid(qtp_fp),
              'seen': r_seen,
-             'name': name if name is not None else '',
+             'name': lbl,
              'frac': 100.0*(r_seen / total_super),
             }
         related_fps.append(o)
@@ -289,16 +327,19 @@ def qtp_fingerprint(qtpid):
     #return 'Cipher suite str: %s, %s' % (type(tls.cipher_suites), bytes(tls.cipher_suites))
     total_super = get_total_seen(db)
 
-    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels.name) from (select * from super_fingerprints where qtp_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels on a.id=labels.id group by a.id order by seen desc;', [int(qtpid)])
+    db.cur.execute('select a.id, min(a.quic_fp), min(a.tls_fp), min(a.qtp_fp), sum(count) as seen, min(labels_inferred.name), bool_and(labels_inferred.observed) from (select * from super_fingerprints where qtp_fp=%s) as a left join super_measurements on a.id=super_measurements.id left join labels_inferred on a.id=labels_inferred.id group by a.id order by seen desc;', [int(qtpid)])
     related_fps = []
     for row in db.cur.fetchall()[:15]:
-        sid, quic_fp, tls_fp, qtp_fp, r_seen, name = row
+        sid, quic_fp, tls_fp, qtp_fp, r_seen, name, observed = row
+        lbl = ''
+        if name is not None:
+            lbl = name if observed else 'Likely %s' % name
         o = {'id': hid(sid),
              'quic_fp': hid(quic_fp),
              'tls_fp': hid(tls_fp),
              'qtp_fp': hid(qtp_fp),
              'seen': r_seen,
-             'name': name if name is not None else '',
+             'name': lbl,
              'frac': 100.0*(r_seen / total_super),
             }
         related_fps.append(o)
@@ -329,7 +370,7 @@ def fingerprint(fid):
     f = lookup_fingerprints(db, int(fid))
     if f is None:
         return 'Not found'
-    fid_hex = hid(fid)
+    fid_hex = hid(int(fid))
 
     rank, seen, frac_seen, total = f.get_rank(db) # sloooow...
     #rank_wk, seen_wk, frac_seen_wk = f.get_rank()     # 250 ms, 130 ms with caching of total_seen()
@@ -390,4 +431,40 @@ def fingerprint(fid):
         #times=times)
         #disable_active_migration=qtp.disable_active_migration, \
 
+def get_s_diff(l1, l2):
+    out = []
+    for elem in diff.myers_diff(l1, l2):
+        obj = {'s': elem.line, \
+               'inserted': isinstance(elem, diff.Insert), \
+               'removed':  isinstance(elem, diff.Remove)}
+        out.append(obj)
+    return out
+
+def get_sn_diff(l1, l2):
+    out = []
+    for elem in diff.myers_diff(l1, l2):
+        obj = {'s': elem.line['s'], \
+               'n': elem.line['n'], \
+               'inserted': isinstance(elem, diff.Insert), \
+               'removed':  isinstance(elem, diff.Remove)}
+        out.append(obj)
+    return out
+
+
+
+@app.route('/compare/<hid1>/<hid2>')
+def compare(hid1, hid2):
+    fid1, = struct.unpack('!q', bytes.fromhex(hid1))
+    fid2, = struct.unpack('!q', bytes.fromhex(hid2))
+    db = get_db()
+
+    # TODO: lookup all 4 fingerprints
+    fp1 = lookup_fingerprints(db, int(fid1))
+    fp2 = lookup_fingerprints(db, int(fid2))
+    if fp1 is None:
+        return 'Not found: %s' % (hid1)
+    if fp2 is None:
+        return 'Not found: %s' % (hid2)
+
+    
 

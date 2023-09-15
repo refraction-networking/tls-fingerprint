@@ -415,7 +415,8 @@ class Varint(object):
     def __init__(self, b=b''):
         self.b = bytes(b)
 
-    def __int__(self):
+    # Used to be this, but we zeroed out the length field
+    def __decode_varint__(self):
         if len(self.b) == 0:
             return 0
         # Get 2 most significant bits
@@ -427,6 +428,9 @@ class Varint(object):
         for i in range(1, blen):
             n = (n << 8) + self.b[i]
         return n
+
+    def __int__(self):
+        return int.from_bytes(self.b, 'big')
 
     def __str__(self):
         if len(self.b) == 0:
