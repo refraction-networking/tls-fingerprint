@@ -215,6 +215,8 @@ def qfp(qid):
     related_fps = []
     for row in db.cur.fetchall()[:15]:
         sid, quic_fp, tls_fp, qtp_fp, r_seen, name, observed = row
+        if r_seen is None:
+            r_seen = 0
         lbl = ''
         if name is not None:
             lbl = name if observed else 'Likely %s' % name
@@ -331,6 +333,8 @@ def qtp_fingerprint(qtpid):
     related_fps = []
     for row in db.cur.fetchall()[:15]:
         sid, quic_fp, tls_fp, qtp_fp, r_seen, name, observed = row
+        if r_seen is None:
+                r_seen = 0
         lbl = ''
         if name is not None:
             lbl = name if observed else 'Likely %s' % name
