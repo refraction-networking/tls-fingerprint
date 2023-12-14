@@ -413,6 +413,7 @@ ext_dict = {
   0x0017: "extended_master_secret",
   0x0018: "token_binding",
   0x0019: "cached_info",
+  0x0022: "delegate_credential",
   0xff01: "renegotiation_info",
   0x0023: "SessionTicket TLS",
   0x3374: "NPN",
@@ -437,6 +438,7 @@ ext_dict = {
   0x4469: "application_settings",
   0x5500: "LEGACY_token_binding",    # https://community.qualys.com/thread/15849
   0x754f: "LEGACY_ChannelID",
+  0xfe0d: "encrypted_client_hello",
   35655:  "LEGACY_padding",          # https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/NSS_3.15.5_release_notes
 }
 
@@ -481,6 +483,9 @@ curve_dict = {
   0x0103: "ffdhe6144",
   0xff00: "Unassigned",
   0x0a0a: "GREASE",
+
+  0xfe30: "X25519Kyber512Draft00",
+  0x6399: "X25519Kyber768Draft00",
 }
 
 
