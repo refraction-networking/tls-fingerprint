@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %} - Top{% endblock %}
+{% block top_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="col-12">
+        <h3>Top Fingerprints (over last week)</h3>
+        <table class="table table-condensed table-sm table-striped">
+          <thead>
+            <tr>
+            <th>Rank</th>
+            <th>Fingerprint ID</th>
+            <th>Cluster #</th>
+            <th>Connections</th>
+          </thead>
+          <tbody>
+            {% for d in top_ids %}
+              <tr>
+                <td>{{ d.rank }}</td>
+                <td><a href="/id/{{ d.id }}">{{ d.id }}</a>{% if d.labels|length > 0 %}
+                ({% for l in d.labels %}{{ l.name }}{% if not loop.last %},<br/>{% endif %}{% endfor %})
+                {% endif %}</td>
+                <td>{% if d.cluster is not none %}<a href="/cluster/{{ d.id }}">Cluster #{{ d.cluster }}</a>{% endif %}</td>
+                <td>{{'%0.1f'| format(d.frac|float)}}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+{% endblock %}
+
+
+{% block foot %}
+<!--
+
+-->
+{% endblock %}

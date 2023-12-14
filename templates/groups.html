@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %} - Groups{% endblock %}
+{% block groups_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="col-12">
+        <h3>Top Named Groups (past week)</h3>
+        <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">Named Groups</h4>
+        <p>
+        Named Groups (previously Supported Groups / Elliptic Curves) is an extension that indicates the list of
+        cryptographic groups that can be used in the TLS key exchange.</p>
+        </div>
+        <table class="table table-condensed table-sm table-striped">
+          <thead>
+            <tr>
+            <th>Rank</th>
+            <th>Named Group</th>
+            <th>Fingerprints</th>
+            <th>Connections</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in top_groups %}
+              <tr>
+                <td>{{ e.rank }}</td>
+                <td><a href="/find/group/{{ '%04x' % e.id }}">{{ e.name }} (0x{{ '%04x' % e.id }})</a></td>
+                <td>{{ e.fps }}</td>
+                <td>{{'%0.1f'| format(e.frac|float)}}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+{% endblock %}
+
+
+{% block foot %}
+<!--
+Rank & Group & Fingerprints & \% Connections \\
+\hline
+
+{% for d in top_groups %}
+{{ d.name|replace("_","\\_") }} & {{ '%0.1f'|format(d.frac|float) }}% \\
+{% endfor %}
+
+-->
+{% endblock %}

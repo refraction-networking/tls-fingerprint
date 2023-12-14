@@ -1,0 +1,3 @@
+count,frac
+{% for d in data %}{{ loop.index }},{{ d[1] }}
+{% endfor %}

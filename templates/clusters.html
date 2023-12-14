@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %} - Clusters{% endblock %}
+{% block clusters_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="col-12">
+        <h3>Top Clusters (past week)</h3>
+
+        <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">About clusters</h4>
+        <p>We group fingerprints into <i>clusters</i> based on similarity.
+        </p>
+        <p>TLS implementations often produce multiple fingerprint variants, because they may send slightly different extensions, data, or cipher suites in different contexts.
+        To identify fingerprints likely made by
+        the same implementation, we place an edge between fingerprints if they are within 5 <a href="https://en.wikipedia.org/wiki/Levenshtein_distance">Levenshtein edit distance</a>
+        from another fingerprint in a cluster.</p>
+        </div>
+
+        <div class="alert alert-success" role="alert">
+        <b>{{ clusters|length }}</b> clusters, comprising <b>{{ total_fps }}</b> fingerprints / <b>{{ '%0.1f' % total_pct_seen }}%</b> connections.<br/>
+        </div>
+
+        <table id="clusters" class="table table-condensed table-striped table-sm table-bordered">
+          <thead>
+            <th>Cluster #</th>
+            <th>Fingerprints</th>
+            <th>% Connections</th>
+          </thead>
+          <tbody>
+            {% for c in clusters %}
+              <tr>
+                      <td><a href="/cluster/{{ c.largest_id }}">Cluster #{{ c.cluster_num }}</a></td>
+                      <td>{{ c.num_fps }}</td>
+                      <td>{{ '%0.1f'|format(c.pct_conns|float) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+
+    <!-- Using https://github.com/mdbootstrap/bootstrap-material-design -->
+    <script type="text/javascript" src="/static/datatables.min.js"></script>
+    <script>
+$(document).ready(function () {
+        $('#clusters').DataTable(
+            {"order": [[ 2, "desc" ]],
+             "searching": true});
+        $('.dataTables_length').addClass('bs-select');
+});
+    </script>
+{% endblock %}
+
+
+{% block foot %}
+
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %} - Extensions{% endblock %}
+{% block extensions_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="col-12">
+        <h3>Top Extensions (past week)</h3>
+        <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">About extensions</h4>
+        <p>Extensions convey support for additional features in the Client Hello. Some extension types also contain data,
+        which we collect for a specific set of extensions.</p>
+        <p>
+        Below are the most popular extensions seen in Client Hello messages.</p>
+        </div>
+        <table class="table table-condensed table-striped table-sm">
+          <thead>
+            <tr>
+            <th>Rank</th>
+            <th>Extension</th>
+            <th>Fingerprints</th>
+            <th>Connections</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in top_exts %}
+              <tr>
+                <td>{{ e.rank }}</td>
+                <td><a href="/find/extension/{{ '%04x' % e.id }}">{{ e.name }} (0x{{ '%04x' % e.id }})</a></td>
+                <td>{{ e.fps }}</td>
+                <td>{{'%0.1f'| format(e.frac|float)}}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+{% endblock %}
+
+
+{% block foot %}
+<!--
+Rank & Extension & Fingerprints & \% Connections \\
+\hline
+
+{% for d in top_exts %}
+{{ d.name|replace("_","\\_") }} & {{ '%0.1f'|format(d.frac|float) }}% \\
+{% endfor %}
+
+-->
+{% endblock %}

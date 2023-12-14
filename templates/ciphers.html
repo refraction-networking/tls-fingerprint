@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %} - Ciphers{% endblock %}
+{% block ciphers_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="col-12">
+        <h3>Top Cipher Suites (past week)</h3>
+        <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">About Cipher Suites</h4>
+        <p>Cipher Suites are groups of cryptographic algorithms used in a TLS connection.
+        Clients send a list of cipher suites they support in the Client Hello, and the server selects one and responds with it in the Server Hello.
+        </p>
+        <p>This table lists the relative support of cipher suites by clients and servers.
+        </p>
+        </div>
+
+        <table id="ciphers" class="table table-condensed table-striped table-sm table-bordered">
+          <thead>
+            <th>Cipher Suite</th>
+            <th>Fingerprints</th>
+            <th>% Client Hellos</th>
+            <th>% Server Hellos</th>
+          </thead>
+          <tbody>
+            {% for e in top_ciphers %}
+              <tr>
+                <td><a href="/find/cipher/{{ '%04x' % e.id }}">{{ e.name }} (0x{{ '%04x' % e.id }})</a></td>
+                <td>{{ e.fps }}</td>
+                <td>{{'%0.1f'| format(e.frac|float)}}%</td>
+                <td>{{'%0.1f'| format(e.selected_f|float)}}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+
+    <!-- Using https://github.com/mdbootstrap/bootstrap-material-design -->
+    <script type="text/javascript" src="/static/datatables.min.js"></script>
+    <script>
+$(document).ready(function () {
+        $('#ciphers').DataTable(
+            {"order": [[ 2, "desc" ]],
+             "searching": true});
+        $('.dataTables_length').addClass('bs-select');
+});
+    </script>
+{% endblock %}
+
+
+{% block foot %}
+
+{% endblock %}

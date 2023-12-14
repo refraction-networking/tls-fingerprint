@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{% endblock %}
+{% block home_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+      <div class="jumbotron">
+        <h1>TLS Fingerprint</h1>
+        <p class="lead">We collect anonymized TLS Client Hello messages from the
+        <a href="https://colorado.edu">University of Colorado Boulder</a> campus network, in order
+        to measure the popularity of various implementations actually used in practice.</p>
+
+        <div id="your-browser" class="alert alert-primary" style="display: none">
+        Your browser generates the fingerprint <a id="fp-url" href="#"></a><span id="fp-cluster-span" style="display: none"> (from <a href="#" id="fp-cluster-url">Cluster #<span id="fp-cluster"></span></a>)</span>,
+        its normalized version <a id="norm-fp-url" href="#"></a><sup><a href="/norm_fp">What's N?</a></sup> is seen in <b><span id="fp-pct"></span>%</b> of connections, 
+        making it ranked <b>#<span id="fp-rank"></span></b>
+        by popularity.
+        </div>
+
+        <h3>Why collect fingerprints?</h3>
+        <p>
+        TLS fingerprints allow us to identify problems in common TLS applications. For example,
+        we can investigate the ability of censorship circumvention tools to mimic and blend in with
+        other popular TLS implementations. Censors can <a href="https://groups.google.com/forum/#!topic/traffic-obf/BpFSCVgi5rs">block</a> circumvention tools that send uncommon
+        TLS fingerprints. To combat this, we can observe the fingerprints that circumvention tools
+        produce and compare them to our dataset. Less popular fingerprints are at risk of being
+        blocked by censors at low cost.
+        </p>
+        <p>
+        We can also measure
+        <a href="/weak-ciphers">Weak cipher suites</a> still in widespread use, and track
+        the popularity of <a href="/top/versions">TLS Versions</a> and
+        <a href="/extensions">Extensions</a>.
+        </p>
+
+        <h3><a href="https://github.com/refraction-networking/utls">
+            <img src="/static/utls-logo-small.png" style="vertical-align: bottom"/> uTLS Library</a>
+        </h3>
+        <p>
+        To help mimic rapidly-changing popular TLS implementations, we have developed
+        the <a href="https://github.com/refraction-networking/utls">uTLS</a> library,
+        that provides fine-grained control over the Client Hello message, including
+        what cipher suites and extensions are sent. This site also provides
+        auto-generated uTLS configuration code to mimic fingerprints we observe.
+        </p>
+
+        <h3>More details</h3>
+        <p>
+        Details on our collected data, analysis, and uTLS library can be found in
+        our paper:
+
+        </p>
+        <p>
+        <div class="row alert alert-primary">
+         <div class="col-1">
+        <a class="btn btn-primary" href="/static/frolov2019.pdf" role="button">Paper</a><br/>
+         </div>
+         <div class="col-8">
+        <a href="/static/frolov2019.pdf"><b>The use of TLS in Censorship Circumvention</b></a><br/>
+        <i><a href="https://twitter.com/srfrolov">Sergey Frolov</a> and <a href="https://twitter.com/ewust">Eric Wustrow</a> (University of Colorado Boulder)</i></br>
+        In <a href="https://www.ndss-symposium.org/ndss2019/">
+            <i>The Network and Distributed System Security Symposium 2019 (NDSS'19)</i></a>
+         </div>
+         </div>
+     </div>
+    </main>
+<script src="/static/fingerprint.js"></script>
+
+{% endblock %}

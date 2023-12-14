@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %} - ALPN{% endblock %}
+{% block alpn_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <h3>Application Layer Protocol Negotiation (ALPN)</h3>
+        ALPN provides a way for client's to specify the application protocols they support.
+
+        <h3>Top Client ALPNs</h3>
+        <table class="table table-bordered">
+        <thead>
+            <tr>
+            <th>Rank</th>
+            <th>ALPN</th>
+            <th>Unique Fingerprints</th>
+            <th>% Fingerprints</th>
+            <th>Connections</th>
+            <th>% Connections</th>
+            </tr>
+    </thead>
+    <tbody>
+
+        {% for d in client_alpns %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{% for alpn in d.alpns %}{{ alpn }}<br/>{% endfor %}</td>
+            <td>{{ d.num_fps }}</td>
+            <td>{{ '%0.2f'|format(d.frac_fp*100) }}%</td>
+            <td>{{ d.seen }}</td>
+            <td>{{ '%0.2f'|format(d.frac_seen*100) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+
+    <h3>Selected ALPNs (Server Hello)</h3>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>Rank</th>
+            <th>ALPN</th>
+            <th>Fingerprints</th>
+            <th>% Fingerprints</th>
+            <th>Connections</th>
+            <th>% Connections</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for p in selected_alpns %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ p.alpn }}</td>
+            <td>{{ p.num_fps }}</td>
+            <td>{{ '%0.2f'|format(p.frac_fp*100) }}%</td>
+            <td>{{ p.seen }}</td>
+            <td>{{ '%0.2f'|format(p.frac_seen*100) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+
+
+    <h3>Popular ALPNs supported by clients</h3>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>Rank</th>
+            <th>ALPN</th>
+            <th>Fingerprints</th>
+            <th>% Fingerprints</th>
+            <th>Connections</th>
+            <th>% Connections</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for p in popular_alpns %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ p.alpn }}</td>
+            <td>{{ p.num_fps }}</td>
+            <td>{{ '%0.2f'|format(p.frac_fp*100) }}%</td>
+            <td>{{ p.seen }}</td>
+            <td>{{ '%0.2f'|format(p.frac_seen*100) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+
+    </main>
+{% endblock %}
+
+
+{% block foot %}
+<!--
+Latex tables
+Client ALPNs:
+    ALPN & Fingerprints & \% Connections \\
+    \hline
+        {% for d in client_alpns[:5] %}
+            {% for alpn in d.alpns %}{{ alpn }}\\
+            {% endfor %}
+        & {{ d.num_fps }} & {{ '%0.2f'|format(d.frac_seen*100) }}\% \\
+        \hline{% endfor %}
+
+
+----
+Selected ALPN:
+    ALPN & Fingerprints & \% Connections \\
+    \hline
+    {% for p in selected_alpns[:10] %}
+    {{ p.alpn }} & {{ p.num_fps }} & {{ '%0.1f'|format(p.frac_seen*100) }}\% \\{% endfor %}
+
+
+----
+Popular client-supported ALPN:
+    ALPN & Fingerprints & \% Connections \\
+    \hline
+    {% for p in popular_alpns[:10] %}
+    {{ p.alpn }} & {{ p.num_fps }} & {{ '%0.1f'|format(p.frac_seen*100) }}\% \\{% endfor %}
+
+
+
+
+
+
+-->
+{% endblock %}

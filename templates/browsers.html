@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %} - Browsers{% endblock %}
+{% block browser_class %} active{% endblock %}
+{% block content %}
+    <script src="//d3js.org/d3.v4.min.js"></script>
+
+    <main role="main" class="container">
+        <h1>Browsers</h1>
+        <div class="graph" id="total">
+        <script src="/stackgraph.js/data/browsers/total"></script>
+        </div>
+
+        <h1>TLS versions</h1>
+        <div class="graph" id="version">
+        <script src="/stackgraph.js/data/versions/version"></script>
+        </div>
+
+    </main>
+{% endblock %}

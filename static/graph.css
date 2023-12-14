@@ -1,0 +1,35 @@
+    .graph {
+      font: 8px sans-serif;
+    }
+    
+    .axis path,
+    .axis line {
+      fill: none;
+      stroke: #000;
+      shape-rendering: crispEdges;
+    }
+    
+    .x.axis path {
+      display: none;
+    }
+    
+    .line {
+      fill: none;
+      stroke: steelblue;
+      stroke-width: 1.5px;
+    }
+
+
+    text {
+        font-size: 14pt;
+    }
+
+
+    .right-inline {
+        text-align: right;
+        display: block;
+        position: relative;
+        top: -1.5em;
+        margin-bottom: -1.5em;
+        color: #888;
+    }

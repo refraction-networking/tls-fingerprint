@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %} - Weak ciphers{% endblock %}
+{% block weak_class %} active{% endblock %}
+{% block content %}
+
+    <main role="main" class="container">
+        <table class="table table-bordered table-sm table-striped">
+        <thead>
+            <tr>
+            <th>Cipher</th>
+            <th>Unique Fingerprints (%)</th>
+            <th>Connections</th>
+            </tr>
+    </thead>
+    <tbody>
+        <tr style="font-weight: bold">
+        <td>*_MD5</td>
+        <td>{{ md5_num }} ({{ '%0.1f' % (100*(md5_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(md5_seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% for c in md5_breakdown %}
+        <tr>
+        <td style="padding-left: 5em"><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }}</a></td>
+        <td>{{ c.fps }} ({{ '%0.1f' % (100*(c.fps|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(c.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+
+        <!--<tr>
+        <td>SHA1</td>
+        <td>{{ sha_num }} ({{ '%0.1f' % (100*(sha_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(sha_seen|float)/tot_seen) }}%</td>
+        </tr>-->
+ 
+        <tr style="font-weight: bold">
+        <td>*_EXPORT_*</td>
+        <td>{{ export_num }} ({{ '%0.1f' % (100*(export_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(export_seen|float)/tot_seen) }}%</td>
+        </tr>
+
+        {% for c in export_breakdown %}
+        <tr>
+        <td style="padding-left: 5em"><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }}</a></td>
+        <td>{{ c.fps }} ({{ '%0.1f' % (100*(c.fps|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(c.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+
+
+        <tr style="font-weight: bold">
+        <td>*_RC4_*</td>
+        <td>{{ rc4_num }} ({{ '%0.1f' % (100*(rc4_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(rc4_seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% for c in rc4_breakdown %}
+        <tr>
+        <td style="padding-left: 5em"><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }}</a></td>
+        <td>{{ c.fps }} ({{ '%0.1f' % (100*(c.fps|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(c.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+
+
+
+
+        <tr style="font-weight: bold">
+        <td>*_DES_*</td>
+        <td>{{ des_num }} ({{ '%0.1f' % (100*(des_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(des_seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% for c in des_breakdown %}
+        <tr>
+        <td style="padding-left: 5em"><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }}</a></td>
+        <td>{{ c.fps }} ({{ '%0.1f' % (100*(c.fps|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(c.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+
+
+
+        <tr style="font-weight: bold">
+        <td>*_3DES_*</td>
+        <td>{{ des3_num }} ({{ '%0.1f' % (100*(des3_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(des3_seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% for c in des3_breakdown %}
+        <tr>
+        <td style="padding-left: 5em"><a href="/find/cipher/{{ '%04x' % c.id }}">{{ c.name }}</a></td>
+        <td>{{ c.fps }} ({{ '%0.1f' % (100*(c.fps|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(c.seen|float)/tot_seen) }}%</td>
+        </tr>
+        {% endfor %}
+
+
+
+        <tr style="font-weight: bold">
+        <td><a href="/find/cipher/5600">TLS_FALLBACK_SCSV</a></td>
+        <td>{{ fallback_num }} ({{ '%0.1f' % (100*(fallback_num|float)/tot_num) }}%)</td>
+        <td>{{ '%0.1f' % (100*(fallback_seen|float)/tot_seen) }}%</td>
+        </tr>
+
+    </tbody>
+    </table>
+    </main>
+{% endblock %}

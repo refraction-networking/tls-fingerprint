@@ -1,0 +1,52 @@
+### mv_ranked_fingerprints
+CREATE MATERIALIZED VIEW mv_ranked_fingerprints AS SELECT id, n as seen, r as rank FROM
+            (SELECT id, SUM(count) as n, RANK() OVER(ORDER BY SUM(count) DESC) as r, MAX(t) FROM
+            (SELECT id, count, TIMESTAMP WITH TIME ZONE 'epoch' + unixtime * INTERVAL '1 second' as t FROM measurements) as ts
+            where age(now(), t) > '2 hour' group by id order by n desc) as j;
+
+### mv_ranked_fingerprints_week
+CREATE MATERIALIZED VIEW mv_ranked_fingerprints_week AS SELECT id, n as seen, r as rank FROM
+            (SELECT id, SUM(count) as n, RANK() OVER(ORDER BY SUM(count) DESC) as r, MAX(t) FROM
+            (SELECT id, count, TIMESTAMP WITH TIME ZONE 'epoch' + unixtime * INTERVAL '1 second' as t FROM measurements) as ts
+            where age(now(), t) > '2 hour' and age(now(), t) < '1 week' group by id order by n desc) as j;
+
+
+
+### mv_measurements_total
+CREATE MATERIALIZED VIEW mv_measurements_total AS select unixtime, sum(count) as total from measurements group by unixtime;
+
+### mv_version_times
+CREATE MATERIALIZED VIEW mv_version_times AS select record_tls_version, ch_tls_version, unixtime, sum(count) from fingerprints left join measurements on fingerprints.id=measurements.id where unixtime is not null group by record_tls_version,ch_tls_version,unixtime  order by unixtime, record_tls_version, ch_tls_version;
+
+### import custom functions
+CREATE OR REPLACE FUNCTION u16_lev(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'u16_lev' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION u8_lev(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'u8_lev' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION u16_lev_skiphdr(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'u16_lev_skiphdr' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION ipv4(oid) RETURNS text AS '/var/lib/postgresql/pfunc-v1.0.so', 'ipv4' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION ipv4net(smallint) RETURNS text AS '/var/lib/postgresql/pfunc-v1.0.so', 'ipv4net' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION alpn_lev(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'alpn_lev' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION u8_lev_skiphdr(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'u8_lev_skiphdr' LANGUAGE C STRICT;
+CREATE OR REPLACE FUNCTION u16_lev_skipu8hdr(bytea, bytea) RETURNS integer AS '/var/lib/postgresql/pfunc-v1.0.so', 'u16_lev_skipu8hdr' LANGUAGE C STRICT;
+
+# Clusters table:
+create table cluster_edges (source bigint, dest bigint, lev integer, cluster_rank integer);
+
+### permissions
+GRANT SELECT, UPDATE, INSERT ON fingerprints, measurements, useragents, mv_ranked_fingerprints TO tlsfprint;
+
+
+
+### refresh materialized views
+REFRESH MATERIALIZED VIEW mv_ranked_fingerprints; REFRESH MATERIALIZED VIEW mv_measurements_total; REFRESH MATERIALIZED VIEW mv_version_times; REFRESH MATERIALIZED VIEW mv_ranked_fingerprints_week;
+REFRESH MATERIALIZED VIEW mv_sniless_fps;   ## less often...
+
+
+ select measurements.unixtime, count, total, 100*cast(count as float) /cast(total as float) from measurements left join (select unixtime, sum(count) as total from measurements group by unixtime) as q on measurements.unixtime=q.unixtime where id=2275455651835335084 order by unixtime;
+
+select measurements.unixtime, count, total, 100*cast(count as float) / cast(total as float) from measurements left join mv_measurements_total on measurements.unixtime=mv_measurements_total.unixtime where id=%s order by unixtime;
+select measurements.unixtime, count, total, 100*cast(count as float) / cast(total as float) from measurements left join mv_measurements_total on measurements.unixtime=mv_measurements_total.unixtime where id=2275455651835335084 order by unixtime;
+
+
+
+# If you want 0s instead of just a shorter table:
+select mv_measurements_total.unixtime, COALESCE(count,0) as count, total, 100*cast(COALESCE(count,0) as float) / cast(total as float) from mv_measurements_total left join (select * from measurements where id=-8034746929386573667) as m on mv_measurements_total.unixtime=m.unixtime order by unixtime;
