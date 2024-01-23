@@ -9,6 +9,8 @@ extern crate enum_primitive;
 extern crate time;
 extern crate pnet;
 extern crate postgres;
+extern crate pcap_file;
+extern crate rand;
 
 extern crate libc;
 
@@ -87,12 +89,12 @@ pub struct RustGlobalsStruct
 }
 
 #[no_mangle]
-pub extern "C" fn rust_init(core_id: i8, cores_total: i32, dsn_ptr: *const c_char, gre_offset: usize) -> RustGlobalsStruct
+pub extern "C" fn rust_init(core_id: i8, cores_total: i32, dsn_ptr: *const c_char, gre_offset: usize, log_client_hello: usize) -> RustGlobalsStruct
 {
     let dsn_c_str: &CStr = unsafe { CStr::from_ptr(dsn_ptr) };
     let dsn_string: String = dsn_c_str.to_str().unwrap().to_owned();
 
-    let ft = FlowTracker::new_db(dsn_string, core_id, cores_total, gre_offset);
+    let ft = FlowTracker::new_db(dsn_string, core_id, cores_total, gre_offset, log_client_hello);
     RustGlobalsStruct { ft: unsafe { transmute(Box::new(ft))}}
 }
 

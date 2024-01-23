@@ -48,8 +48,8 @@ int g_update_overloaded_decoys_when_convenient = 0;
 
 #define TIMESPEC_DIFF(a, b) ((a.tv_sec - b.tv_sec)*1000000000LL + \
                              ((int64_t)a.tv_nsec - (int64_t)b.tv_nsec))
-void the_program(uint8_t core_id, unsigned int log_interval, char* db_source_name, int gre_offset) {
-    struct RustGlobalsStruct rust_globals = rust_init(core_id, g_num_worker_procs, db_source_name, gre_offset);
+void the_program(uint8_t core_id, unsigned int log_interval, char* db_source_name, int gre_offset, int log_client_hello) {
+    struct RustGlobalsStruct rust_globals = rust_init(core_id, g_num_worker_procs, db_source_name, gre_offset, log_client_hello);
     void* rust_ptr = (void*) &rust_globals;
 
     printf("Zero-copy TLS ClientHello Analyzer child proc started on core %d!\n", core_id);
@@ -195,7 +195,7 @@ void startup_pfring_maybezc(unsigned int cluster_id, int proc_ind, int cluster_q
 }
 
 pid_t start_process(int core_affinity, unsigned int cluster_id,
-                             int proc_ind, unsigned int log_interval, char* db_source_name, int cluster_queue_offset, int gre_offset)
+                             int proc_ind, unsigned int log_interval, char* db_source_name, int cluster_queue_offset, int gre_offset, int log_client_hello)
 {
     pid_t the_pid = fork();
     if(the_pid == 0)
@@ -207,7 +207,7 @@ pid_t start_process(int core_affinity, unsigned int cluster_id,
         signal(SIGINT, sigproc_child);
         signal(SIGTERM, sigproc_child);
         signal(SIGPIPE, ignore_sigpipe);
-        the_program(proc_ind, log_interval, db_source_name, gre_offset);
+        the_program(proc_ind, log_interval, db_source_name, gre_offset, log_client_hello);
     }
     printf("Core %d: PID %d, lcore %d\n", proc_ind, the_pid, core_affinity);
     return the_pid;
@@ -238,6 +238,7 @@ struct cmd_options
     char*           db_source_name; // DSN for SQL database
 
     size_t          gre_offset; // Offset to drop packet headers (GRE, ERSPAN, etc)
+    size_t          log_client_hello; // Rate of logging of ClientHello packets to PCAP 0 is no logging 100 is full
 };
 
 void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
@@ -248,10 +249,11 @@ void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
     options->core_affinity_offset = 0;
     options->log_interval = 1000; // milliseconds
     options->gre_offset = 0;
+    options->log_client_hello = 0;
     int skip_core = -1; // If >0, skip this core when incrementing
 
     char c;
-    while ((c = getopt(argc,argv,"n:m:c:d:o:l:s:g:")) != -1)
+    while ((c = getopt(argc,argv,"n:m:c:d:o:l:s:g:p:")) != -1)
     {
         switch (c)
         {
@@ -277,8 +279,11 @@ void parse_cmd_args(int argc, char* argv[], struct cmd_options* options)
                 skip_core = atoi(optarg);
                 break;
             case 'g':
-		options->gre_offset = atoi(optarg);
-		break;
+		        options->gre_offset = atoi(optarg);
+		        break;
+            case 'p':
+                options->log_client_hello = atoi(optarg);
+                break;
             default:
                 fprintf(stderr, "Unknown option %c\n", c);
                 break;
@@ -339,7 +344,7 @@ int main(int argc, char* argv[]) {
 
         if (core_num == options.skip_core) core_num++;
         g_forked_pids[i] = start_process(core_num, options.cluster_id, i,
-            options.log_interval, options.db_source_name, options.cluster_queue_offset, options.gre_offset);
+            options.log_interval, options.db_source_name, options.cluster_queue_offset, options.gre_offset, options.log_client_hello);
         core_num++;
     }
     signal(SIGINT, sigproc_parent);
