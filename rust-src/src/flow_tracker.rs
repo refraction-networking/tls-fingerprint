@@ -1,14 +1,18 @@
 extern crate time;
 
+use std::fs::File;
 use std::net::IpAddr;
 
 use std::collections::{HashSet, HashMap, VecDeque};
+use pcap_file::pcap::{PcapPacket, PcapWriter};
 use pnet::packet::ip::{IpNextHeaderProtocols};
-use pnet::packet::ethernet::{EthernetPacket};
-use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
+use pnet::packet::ipv4::{Ipv4Packet, MutableIpv4Packet};
 use pnet::packet::tcp::{TcpPacket, TcpFlags, ipv4_checksum, ipv6_checksum};
 use pnet::packet::ipv6::Ipv6Packet;
 use pnet::packet::{Packet};
+use rand::rngs::ThreadRng;
+use rand::Rng;
 
 use std::ops::Sub;
 
@@ -21,7 +25,6 @@ use common::{TimedFlow, Flow};
 use postgres::{Client, NoTls};
 
 use std::thread;
-
 
 pub struct FlowTracker {
     flow_timeout: Duration,
@@ -42,10 +45,15 @@ pub struct FlowTracker {
     stale_server_drops: VecDeque<TimedFlow>,
 
     pub gre_offset: usize,
+    pub log_client_hello: usize,
+    pub pcap_writer: PcapWriter<File>,
+    pub rng: ThreadRng,
 }
 
 impl FlowTracker {
-    pub fn new(gre_offset: usize) -> FlowTracker {
+    pub fn new(gre_offset: usize, log_client_hello: usize) -> FlowTracker {
+        let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+        let output = File::create(fname).expect("Error creating file out");
         FlowTracker {
             flow_timeout: Duration::from_secs(20),
             tracked_flows: HashSet::new(),
@@ -58,13 +66,17 @@ impl FlowTracker {
             stats: StatsTracker::new(),
             dsn: None,
             gre_offset: gre_offset,
+            log_client_hello: log_client_hello,
+            pcap_writer: PcapWriter::new(output).expect("Error writing file"),
+            rng: rand::thread_rng(),
         }
     }
 
-    pub fn new_db(dsn: String, core_id: i8, total_cores: i32, gre_offset: usize) -> FlowTracker {
+    pub fn new_db(dsn: String, core_id: i8, total_cores: i32, gre_offset: usize, log_client_hello: usize) -> FlowTracker {
         // TODO: (convinience) try to connect to DB and run any query, verifying credentials
         // right away
-
+        let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+        let output = File::create(fname).expect("Error creating file out");
         let mut ft = FlowTracker {
             flow_timeout: Duration::from_secs(20),
             tracked_flows: HashSet::new(),
@@ -77,6 +89,9 @@ impl FlowTracker {
             stats: StatsTracker::new(),
             dsn: Some(dsn),
             gre_offset: gre_offset,
+            log_client_hello: log_client_hello,
+            pcap_writer: PcapWriter::new(output).expect("Error writing file"),
+            rng: rand::thread_rng(),
         };
         // flush to db at different time on different cores
         ft.cache.last_flush = ft.cache.last_flush.sub(time::Duration::seconds(
@@ -168,6 +183,10 @@ impl FlowTracker {
                     let norm_fp_id = fp.get_fingerprint(true);
 
                     self.begin_tracking_server_flow(&flow.reversed_clone(), fp_id as i64);
+
+                    if self.rng.gen_range(0..100) < self.log_client_hello {
+                        write_to_pcap_with_headers(&mut self.pcap_writer, tcp_pkt);
+                    }
 
                     let mut curr_time = time::now();
 
@@ -572,4 +591,43 @@ impl FlowTracker {
                  self.tracked_server_flows.len(), self.stale_server_drops.len());
         self.stats.print_avg_stats();
     }
+}
+
+fn write_to_pcap_with_headers(pcap_writer: &mut PcapWriter<File>, packet: &TcpPacket) -> Result<(), std::io::Error> {
+    // Create dummy IPv4 header
+    let mut ipv4_buffer = [0u8; 20]; // IPv4 header size
+    let mut ipv4_packet = MutableIpv4Packet::new(&mut ipv4_buffer).unwrap();
+    ipv4_packet.set_version(4);
+    ipv4_packet.set_header_length(5);
+    ipv4_packet.set_total_length(20 + packet.packet().len() as u16); // IPv4 header (20) + TCP header (20)
+    ipv4_packet.set_identification(42);
+    ipv4_packet.set_ttl(64);
+    ipv4_packet.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
+
+    // Create dummy Ethernet header
+    let mut ethernet_buffer = [0u8; 14]; // Ethernet header size
+    let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+    ethernet_packet.set_destination([0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA].into()); // Replace with your destination MAC
+    ethernet_packet.set_source([0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB].into()); // Replace with your source MAC
+    ethernet_packet.set_ethertype(EtherTypes::Ipv4);
+
+    // Combine the headers and the TcpPacket payload
+    let combined_bytes = [
+        ethernet_packet.packet(),
+        ipv4_packet.packet(),
+        packet.packet(),
+    ]
+    .concat();
+
+    // Create a PcapPacket from the combined bytes
+    let pcap_packet = PcapPacket {
+        timestamp: Default::default(), // You may set an appropriate timestamp here
+        orig_len: combined_bytes.len() as u32,
+        data: combined_bytes.into(),
+    };
+
+    // Write the combined packet to the .pcap file
+    pcap_writer.write_packet(&pcap_packet);
+
+    Ok(())
 }

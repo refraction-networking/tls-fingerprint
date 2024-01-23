@@ -10,6 +10,8 @@ extern crate time;
 extern crate pnet;
 extern crate pcap;
 extern crate postgres;
+extern crate pcap_file;
+extern crate rand;
 
 use pnet::datalink::{self, NetworkInterface};
 use pnet::datalink::Channel::Ethernet;
@@ -36,7 +38,7 @@ fn main() {
         .next()
         .unwrap();
 
-    let mut ft = FlowTracker::new(0);
+    let mut ft = FlowTracker::new(0, 100);
 
     let from_pcap_file = false;
     let pcap_filename = "TMP";
