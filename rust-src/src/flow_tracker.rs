@@ -26,6 +26,8 @@ use postgres::{Client, NoTls};
 
 use std::thread;
 
+const TRACKER_NORM_FPS: [u64; 5] = [0x4a2d2f5c643bd93c, 0x183ab61a2dd6dca5, 0x95acc632647c02b9, 0xfe58b0a5432a0b34, 0x30a6dd8cf5e3c559];
+
 pub struct FlowTracker {
     flow_timeout: Duration,
     write_to_stdout: bool,
@@ -46,14 +48,18 @@ pub struct FlowTracker {
 
     pub gre_offset: usize,
     pub log_client_hello: usize,
-    pub pcap_writer: PcapWriter<File>,
+    pub pcap_writer: Option<PcapWriter<File>>,
     pub rng: ThreadRng,
 }
 
 impl FlowTracker {
     pub fn new(gre_offset: usize, log_client_hello: usize) -> FlowTracker {
-        let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
-        let output = File::create(fname).expect("Error creating file out");
+        let mut pcap_writer = None;
+        if log_client_hello > 0 {
+            let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+            let output = File::create(fname).expect("Error creating file out");
+            pcap_writer = Some(PcapWriter::new(output).expect("Error writing file"))
+        }
         FlowTracker {
             flow_timeout: Duration::from_secs(20),
             tracked_flows: HashSet::new(),
@@ -67,7 +73,7 @@ impl FlowTracker {
             dsn: None,
             gre_offset: gre_offset,
             log_client_hello: log_client_hello,
-            pcap_writer: PcapWriter::new(output).expect("Error writing file"),
+            pcap_writer: pcap_writer,
             rng: rand::thread_rng(),
         }
     }
@@ -75,8 +81,12 @@ impl FlowTracker {
     pub fn new_db(dsn: String, core_id: i8, total_cores: i32, gre_offset: usize, log_client_hello: usize) -> FlowTracker {
         // TODO: (convinience) try to connect to DB and run any query, verifying credentials
         // right away
-        let fname = format!("client_hellos_rate_{}_start_time_{}_core_{}.pcap", log_client_hello, time::now().to_timespec().sec, core_id);
-        let output = File::create(fname).expect("Error creating file out");
+        let mut pcap_writer = None;
+        if log_client_hello > 0 {
+            let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+            let output = File::create(fname).expect("Error creating file out");
+            pcap_writer = Some(PcapWriter::new(output).expect("Error writing file"))
+        }
         let mut ft = FlowTracker {
             flow_timeout: Duration::from_secs(20),
             tracked_flows: HashSet::new(),
@@ -90,7 +100,7 @@ impl FlowTracker {
             dsn: Some(dsn),
             gre_offset: gre_offset,
             log_client_hello: log_client_hello,
-            pcap_writer: PcapWriter::new(output).expect("Error writing file"),
+            pcap_writer: pcap_writer,
             rng: rand::thread_rng(),
         };
         // flush to db at different time on different cores
@@ -184,8 +194,8 @@ impl FlowTracker {
 
                     self.begin_tracking_server_flow(&flow.reversed_clone(), fp_id as i64);
 
-                    if self.rng.gen_range(0..100) < self.log_client_hello {
-                        write_to_pcap_with_headers(&mut self.pcap_writer, tcp_pkt);
+                    if self.rng.gen_range(0..100) < self.log_client_hello &&  TRACKER_NORM_FPS.contains(&norm_fp_id)  {
+                        write_to_pcap_with_headers(&mut self.pcap_writer.as_mut().unwrap(), tcp_pkt);
                     }
 
                     let mut curr_time = time::now();
