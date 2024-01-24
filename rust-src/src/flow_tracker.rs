@@ -83,7 +83,7 @@ impl FlowTracker {
         // right away
         let mut pcap_writer = None;
         if log_client_hello > 0 {
-            let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+            let fname = format!("client_hellos_rate_{}_start_time_{}_core_{}.pcap", log_client_hello, time::now().to_timespec().sec, core_id);
             let output = File::create(fname).expect("Error creating file out");
             pcap_writer = Some(PcapWriter::new(output).expect("Error writing file"))
         }
