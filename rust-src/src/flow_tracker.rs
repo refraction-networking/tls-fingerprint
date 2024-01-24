@@ -75,7 +75,7 @@ impl FlowTracker {
     pub fn new_db(dsn: String, core_id: i8, total_cores: i32, gre_offset: usize, log_client_hello: usize) -> FlowTracker {
         // TODO: (convinience) try to connect to DB and run any query, verifying credentials
         // right away
-        let fname = format!("client_hellos_rate_{}_start_time_{}.pcap", log_client_hello, time::now().to_timespec().sec);
+        let fname = format!("client_hellos_rate_{}_start_time_{}_core_{}.pcap", log_client_hello, time::now().to_timespec().sec, core_id);
         let output = File::create(fname).expect("Error creating file out");
         let mut ft = FlowTracker {
             flow_timeout: Duration::from_secs(20),
